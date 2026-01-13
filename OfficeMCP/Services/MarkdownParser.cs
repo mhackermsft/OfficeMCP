@@ -305,6 +305,7 @@ public static partial class MarkdownParser
 
         if (headers.Count == 0) return (null, startIndex + 1);
 
+        var headerCount = headers.Count;
         var i = startIndex + 2; // Skip header and separator
         var rows = new List<List<string>>();
 
@@ -316,9 +317,13 @@ public static partial class MarkdownParser
             var row = ParseTableRow(line);
             if (row.Count > 0)
             {
-                // Pad row to match header count
-                while (row.Count < headers.Count)
+                // Normalize row to match header count exactly
+                // Pad if too few columns
+                while (row.Count < headerCount)
                     row.Add(string.Empty);
+                // Truncate if too many columns (handles malformed rows)
+                if (row.Count > headerCount)
+                    row = row.Take(headerCount).ToList();
                 rows.Add(row);
             }
             i++;
@@ -329,15 +334,23 @@ public static partial class MarkdownParser
 
     private static List<string> ParseTableRow(string line)
     {
-        var cells = line.Split('|')
-            .Select(c => c.Trim())
-            .Where(c => !string.IsNullOrEmpty(c) || line.StartsWith("|") || line.EndsWith("|"))
+        // Handle escaped pipes within cell content by temporarily replacing them
+        // Common escape patterns: \| or using backticks `code|with|pipes`
+        var processedLine = line;
+        
+        // Replace escaped pipes with a placeholder
+        const string pipePlaceholder = "\x00PIPE\x00";
+        processedLine = processedLine.Replace("\\|", pipePlaceholder);
+        
+        // Split on unescaped pipes
+        var cells = processedLine.Split('|')
+            .Select(c => c.Trim().Replace(pipePlaceholder, "|")) // Restore escaped pipes
             .ToList();
 
         // Remove empty cells from start/end caused by leading/trailing pipes
-        if (cells.Count > 0 && string.IsNullOrEmpty(cells[0]) && line.StartsWith("|"))
+        if (cells.Count > 0 && string.IsNullOrEmpty(cells[0]))
             cells.RemoveAt(0);
-        if (cells.Count > 0 && string.IsNullOrEmpty(cells[^1]) && line.EndsWith("|"))
+        if (cells.Count > 0 && string.IsNullOrEmpty(cells[^1]))
             cells.RemoveAt(cells.Count - 1);
 
         return cells;

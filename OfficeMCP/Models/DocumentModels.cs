@@ -162,3 +162,123 @@ public record ContentResult(
     int? TotalParagraphs = null,
     int? TotalPages = null
 );
+
+// ============================================
+// Batch Operation Models for AI Optimization
+// ============================================
+
+/// <summary>
+/// Represents a single Word document operation for batch processing.
+/// </summary>
+public record WordOperation(
+    string Type,
+    string? Text = null,
+    int? Level = null,
+    string[]? Items = null,
+    string[][]? TableData = null,
+    string? ImagePath = null,
+    double? WidthInches = null,
+    double? HeightInches = null,
+    string? AltText = null,
+    bool? Bold = null,
+    bool? Italic = null,
+    bool? Underline = null,
+    string? FontName = null,
+    int? FontSize = null,
+    string? FontColor = null,
+    string? Alignment = null,
+    double? LineSpacing = null,
+    bool? HasHeader = null,
+    string? HeaderBackgroundColor = null,
+    string? AlternateRowColor = null,
+    string? BorderColor = null,
+    double? BorderWidth = null,
+    string? LeftContent = null,
+    string? CenterContent = null,
+    string? RightContent = null,
+    bool? IncludePageNumber = null,
+    bool? IncludeDate = null,
+    string? Markdown = null,
+    string? BaseImagePath = null
+);
+
+/// <summary>
+/// Represents a single Excel workbook operation for batch processing.
+/// </summary>
+public record ExcelOperation(
+    string Type,
+    string? SheetName = null,
+    string? CellReference = null,
+    string? StartCell = null,
+    string? EndCell = null,
+    string? Value = null,
+    string[][]? Values = null,
+    string[][]? TableData = null,
+    bool? HasHeaders = null,
+    string? Formula = null,
+    string? ImagePath = null,
+    double? WidthInches = null,
+    double? HeightInches = null,
+    string? AltText = null,
+    int? ColumnIndex = null,
+    int? RowIndex = null,
+    double? Width = null,
+    double? Height = null,
+    bool? Bold = null,
+    bool? Italic = null,
+    bool? WrapText = null,
+    string? NewSheetName = null
+);
+
+/// <summary>
+/// Represents a single PowerPoint operation for batch processing.
+/// </summary>
+public record PowerPointOperation(
+    string Type,
+    int? SlideIndex = null,
+    string? Title = null,
+    string? Subtitle = null,
+    string? Text = null,
+    string[]? Points = null,
+    string[][]? TableData = null,
+    string? ImagePath = null,
+    string? ShapeType = null,
+    double? XInches = null,
+    double? YInches = null,
+    double? WidthInches = null,
+    double? HeightInches = null,
+    string? BackgroundColor = null,
+    string? FillColor = null,
+    string? BorderColor = null,
+    double? BorderWidth = null,
+    bool? Bold = null,
+    int? FontSize = null,
+    string? FontColor = null,
+    string? AltText = null,
+    string? Notes = null,
+    int? SourceIndex = null,
+    int? FromIndex = null,
+    int? ToIndex = null
+);
+
+/// <summary>
+/// Result of a batch operation containing results for each operation.
+/// </summary>
+public record BatchOperationResult(
+    bool Success,
+    string Message,
+    int TotalOperations,
+    int SuccessfulOperations,
+    int FailedOperations,
+    List<OperationOutcome> Details
+);
+
+/// <summary>
+/// Outcome of a single operation within a batch.
+/// </summary>
+public record OperationOutcome(
+    int Index,
+    string OperationType,
+    bool Success,
+    string Message
+);

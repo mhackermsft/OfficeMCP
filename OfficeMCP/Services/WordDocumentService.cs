@@ -573,6 +573,11 @@ public sealed class WordDocumentService : IWordDocumentService
         format ??= new TableFormatting();
         
         var table = new Table();
+        var columnCount = data.Length > 0 ? data[0].Length : 0;
+        
+        // Calculate column width - distribute evenly across page width
+        // 5000 = 100% in OpenXML percentage units (50ths of a percent)
+        var columnWidthPct = columnCount > 0 ? 5000 / columnCount : 5000;
         
         // Table properties
         var tblPr = new TableProperties(
@@ -584,9 +589,20 @@ public sealed class WordDocumentService : IWordDocumentService
                 new InsideHorizontalBorder { Val = BorderValues.Single, Size = (uint)(format.BorderWidth * 4), Color = format.BorderColor?.TrimStart('#') ?? "000000" },
                 new InsideVerticalBorder { Val = BorderValues.Single, Size = (uint)(format.BorderWidth * 4), Color = format.BorderColor?.TrimStart('#') ?? "000000" }
             ),
-            new TableWidth { Type = TableWidthUnitValues.Pct, Width = "5000" }
+            new TableWidth { Type = TableWidthUnitValues.Pct, Width = "5000" },
+            new TableLayout { Type = TableLayoutValues.Fixed }
         );
         table.AppendChild(tblPr);
+
+        // Define column widths using TableGrid
+        var tableGrid = new TableGrid();
+        for (int i = 0; i < columnCount; i++)
+        {
+            // Use approximate twips for Letter page (6.5 inches usable width = 9360 twips)
+            var colWidthTwips = 9360 / Math.Max(columnCount, 1);
+            tableGrid.AppendChild(new GridColumn { Width = colWidthTwips.ToString() });
+        }
+        table.AppendChild(tableGrid);
 
         for (int rowIndex = 0; rowIndex < data.Length; rowIndex++)
         {
@@ -600,6 +616,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 var cell = new WpTableCell();
                 
                 var tcPr = new TableCellProperties(
+                    new TableCellWidth { Type = TableWidthUnitValues.Pct, Width = columnWidthPct.ToString() },
                     new TableCellVerticalAlignment { Val = TableVerticalAlignmentValues.Center }
                 );
 
@@ -614,7 +631,7 @@ public sealed class WordDocumentService : IWordDocumentService
 
                 cell.AppendChild(tcPr);
 
-                var run = new Run(new Text(cellText ?? string.Empty));
+                var run = new Run(new Text(cellText ?? string.Empty) { Space = SpaceProcessingModeValues.Preserve });
                 if (isHeader)
                 {
                     run.PrependChild(new RunProperties(new Bold()));
@@ -1171,6 +1188,11 @@ public sealed class WordDocumentService : IWordDocumentService
     private static Table CreateMarkdownTable(MarkdownTable mdTable)
     {
         var table = new Table();
+        var columnCount = mdTable.Headers.Count;
+        
+        // Calculate column width - distribute evenly across page width
+        // 5000 = 100% in OpenXML percentage units (50ths of a percent)
+        var columnWidthPct = columnCount > 0 ? 5000 / columnCount : 5000;
         
         var tblPr = new TableProperties(
             new TableBorders(
@@ -1181,9 +1203,20 @@ public sealed class WordDocumentService : IWordDocumentService
                 new InsideHorizontalBorder { Val = BorderValues.Single, Size = 4, Color = "000000" },
                 new InsideVerticalBorder { Val = BorderValues.Single, Size = 4, Color = "000000" }
             ),
-            new TableWidth { Type = TableWidthUnitValues.Pct, Width = "5000" }
+            new TableWidth { Type = TableWidthUnitValues.Pct, Width = "5000" },
+            new TableLayout { Type = TableLayoutValues.Fixed }
         );
         table.AppendChild(tblPr);
+
+        // Define column widths using TableGrid
+        var tableGrid = new TableGrid();
+        for (int i = 0; i < columnCount; i++)
+        {
+            // Use approximate twips for Letter page (6.5 inches usable width = 9360 twips)
+            var colWidthTwips = 9360 / columnCount;
+            tableGrid.AppendChild(new GridColumn { Width = colWidthTwips.ToString() });
+        }
+        table.AppendChild(tableGrid);
 
         // Header row
         var headerRow = new TableRow();
@@ -1191,11 +1224,12 @@ public sealed class WordDocumentService : IWordDocumentService
         {
             var cell = new WpTableCell();
             var tcPr = new TableCellProperties(
+                new TableCellWidth { Type = TableWidthUnitValues.Pct, Width = columnWidthPct.ToString() },
                 new Shading { Val = ShadingPatternValues.Clear, Fill = "E0E0E0" }
             );
             cell.AppendChild(tcPr);
             
-            var run = new Run(new Text(header));
+            var run = new Run(new Text(header) { Space = SpaceProcessingModeValues.Preserve });
             run.PrependChild(new RunProperties(new Bold()));
             cell.AppendChild(new Paragraph(run));
             headerRow.AppendChild(cell);
@@ -1209,7 +1243,11 @@ public sealed class WordDocumentService : IWordDocumentService
             foreach (var cellText in rowData)
             {
                 var cell = new WpTableCell();
-                cell.AppendChild(new Paragraph(new Run(new Text(cellText))));
+                var tcPr = new TableCellProperties(
+                    new TableCellWidth { Type = TableWidthUnitValues.Pct, Width = columnWidthPct.ToString() }
+                );
+                cell.AppendChild(tcPr);
+                cell.AppendChild(new Paragraph(new Run(new Text(cellText) { Space = SpaceProcessingModeValues.Preserve })));
                 row.AppendChild(cell);
             }
             table.AppendChild(row);
