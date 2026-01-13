@@ -22,4 +22,5 @@ public interface IWordDocumentService
     ContentResult GetParagraphRange(string filePath, int startIndex, int endIndex);
     DocumentResult SetPageLayout(string filePath, PageLayoutOptions options);
     DocumentResult AddMarkdownContent(string filePath, string markdown, string? baseImagePath = null);
+    ContentResult ConvertToMarkdown(string filePath);
 }

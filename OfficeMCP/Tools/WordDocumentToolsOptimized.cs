@@ -292,6 +292,61 @@ All markdown formatting is preserved including headings, bold, italic, lists, ta
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
+    [McpServerTool, Description(@"Convert a Word document (.docx) to markdown text. Returns the markdown content as a string.
+
+Preserves formatting including headings, bold, italic, strikethrough, lists, tables, code blocks, and blockquotes.")]
+    public string ConvertWordToMarkdown(
+        [Description("Full path to the Word document (e.g., C:/Documents/report.docx)")] string filePath)
+    {
+        var result = wordService.ConvertToMarkdown(filePath);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool, Description(@"Convert a Word document (.docx) to a markdown file (.md). The output file will have the same name and path but with a .md extension.
+
+**Example**: Converting 'C:/docs/report.docx' creates 'C:/docs/report.md'
+
+Preserves formatting including headings, bold, italic, strikethrough, lists, tables, code blocks, and blockquotes.")]
+    public string ConvertWordFileToMarkdown(
+        [Description("Full path to the Word document (e.g., C:/Documents/report.docx)")] string wordFilePath,
+        [Description("Optional: Custom output path for the markdown file. If not provided, uses same path with .md extension")] string? outputPath = null)
+    {
+        try
+        {
+            // Validate input file exists
+            if (!File.Exists(wordFilePath))
+            {
+                return JsonSerializer.Serialize(new DocumentResult(false, $"Word document not found: {wordFilePath}"), JsonOptions);
+            }
+
+            // Convert to markdown
+            var conversionResult = wordService.ConvertToMarkdown(wordFilePath);
+            if (!conversionResult.Success || string.IsNullOrEmpty(conversionResult.Content))
+            {
+                return JsonSerializer.Serialize(new DocumentResult(false, conversionResult.ErrorMessage ?? "Failed to convert document"), JsonOptions);
+            }
+
+            // Determine output path
+            var mdPath = outputPath ?? Path.ChangeExtension(wordFilePath, ".md");
+
+            // Ensure directory exists
+            var directory = Path.GetDirectoryName(mdPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            // Write markdown to file
+            File.WriteAllText(mdPath, conversionResult.Content);
+
+            return JsonSerializer.Serialize(new DocumentResult(true, $"Successfully converted '{wordFilePath}' to '{mdPath}'", mdPath), JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new DocumentResult(false, $"Error converting Word document: {ex.Message}"), JsonOptions);
+        }
+    }
+
     #region Private Operation Processors
 
     private DocumentResult ProcessMarkdown(string filePath, WordOperation op)

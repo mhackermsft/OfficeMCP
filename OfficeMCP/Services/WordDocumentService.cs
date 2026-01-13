@@ -436,7 +436,201 @@ public sealed class WordDocumentService : IWordDocumentService
         }
     }
 
+    public ContentResult ConvertToMarkdown(string filePath)
+    {
+        try
+        {
+            if (!File.Exists(filePath))
+                return new ContentResult(false, null, $"File not found: {filePath}");
+
+            using var document = WordprocessingDocument.Open(filePath, false);
+            var body = document.MainDocumentPart?.Document.Body;
+
+            if (body == null)
+                return new ContentResult(false, null, "Document body not found");
+
+            var markdownBuilder = new System.Text.StringBuilder();
+            var elements = body.ChildElements.ToList();
+
+            foreach (var element in elements)
+            {
+                var markdown = ConvertElementToMarkdown(element);
+                if (!string.IsNullOrEmpty(markdown))
+                {
+                    markdownBuilder.AppendLine(markdown);
+                    markdownBuilder.AppendLine(); // Add blank line between elements
+                }
+            }
+
+            var result = markdownBuilder.ToString().TrimEnd();
+            return new ContentResult(true, result);
+        }
+        catch (Exception ex)
+        {
+            return new ContentResult(false, null, $"Failed to convert document to markdown: {ex.Message}");
+        }
+    }
+
     #region Private Helper Methods
+
+    private static string ConvertElementToMarkdown(OpenXmlElement element)
+    {
+        return element switch
+        {
+            Paragraph p => ConvertParagraphToMarkdown(p),
+            Table t => ConvertTableToMarkdown(t),
+            _ => string.Empty
+        };
+    }
+
+    private static string ConvertParagraphToMarkdown(Paragraph paragraph)
+    {
+        var text = GetParagraphTextWithFormatting(paragraph);
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var pPr = paragraph.ParagraphProperties;
+
+        // Check for heading style
+        var styleId = pPr?.ParagraphStyleId?.Val?.Value;
+        if (!string.IsNullOrEmpty(styleId) && styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase))
+        {
+            if (int.TryParse(styleId.AsSpan(7), out int level) && level >= 1 && level <= 6)
+            {
+                return new string('#', level) + " " + text.Trim();
+            }
+        }
+
+        // Check for list items (numbered or bullet)
+        var numPr = pPr?.NumberingProperties;
+        if (numPr != null)
+        {
+            var numId = numPr.NumberingId?.Val?.Value;
+            if (numId.HasValue && numId.Value > 0)
+            {
+                // For simplicity, treat all lists as bullet lists in markdown
+                // A more complete implementation would track numbering
+                return "- " + text.Trim();
+            }
+        }
+
+        // Check for blockquote (indented with left border)
+        var pBorders = pPr?.ParagraphBorders;
+        var leftBorder = pBorders?.LeftBorder;
+        if (leftBorder != null && leftBorder.Val != null && leftBorder.Val != BorderValues.None)
+        {
+            return "> " + text.Trim();
+        }
+
+        // Check for horizontal rule (paragraph with only bottom border)
+        var bottomBorder = pBorders?.BottomBorder;
+        if (bottomBorder != null && bottomBorder.Val != null && bottomBorder.Val != BorderValues.None && string.IsNullOrWhiteSpace(text))
+        {
+            return "---";
+        }
+
+        // Check for code block (Consolas font with shading)
+        var runs = paragraph.Descendants<Run>().ToList();
+        if (runs.Count > 0)
+        {
+            var firstRunFonts = runs[0].RunProperties?.RunFonts;
+            if (firstRunFonts?.Ascii?.Value?.Contains("Consolas", StringComparison.OrdinalIgnoreCase) == true ||
+                firstRunFonts?.Ascii?.Value?.Contains("Courier", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                // Check if it looks like a code block
+                var shading = pPr?.Shading ?? runs[0].RunProperties?.Shading;
+                if (shading != null)
+                {
+                    return "```\n" + text + "\n```";
+                }
+                // Inline code for single runs without paragraph shading
+                if (runs.Count == 1)
+                {
+                    return "`" + text.Trim() + "`";
+                }
+            }
+        }
+
+        // Regular paragraph
+        return text.Trim();
+    }
+
+    private static string GetParagraphTextWithFormatting(Paragraph paragraph)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        foreach (var run in paragraph.Descendants<Run>())
+        {
+            var runText = run.InnerText;
+            if (string.IsNullOrEmpty(runText))
+                continue;
+
+            var rPr = run.RunProperties;
+            var isBold = rPr?.Bold != null;
+            var isItalic = rPr?.Italic != null;
+            var isStrike = rPr?.Strike != null;
+            var isCode = rPr?.RunFonts?.Ascii?.Value?.Contains("Consolas", StringComparison.OrdinalIgnoreCase) == true ||
+                         rPr?.RunFonts?.Ascii?.Value?.Contains("Courier", StringComparison.OrdinalIgnoreCase) == true;
+
+            // Apply markdown formatting
+            if (isCode && !isBold && !isItalic)
+            {
+                sb.Append('`').Append(runText).Append('`');
+            }
+            else if (isBold && isItalic)
+            {
+                sb.Append("***").Append(runText).Append("***");
+            }
+            else if (isBold)
+            {
+                sb.Append("**").Append(runText).Append("**");
+            }
+            else if (isItalic)
+            {
+                sb.Append('*').Append(runText).Append('*');
+            }
+            else if (isStrike)
+            {
+                sb.Append("~~").Append(runText).Append("~~");
+            }
+            else
+            {
+                sb.Append(runText);
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static string ConvertTableToMarkdown(Table table)
+    {
+        var rows = table.Descendants<TableRow>().ToList();
+        if (rows.Count == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+
+        for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = rows[rowIndex];
+            var cells = row.Descendants<WpTableCell>().ToList();
+            var cellTexts = cells.Select(c => c.InnerText.Trim().Replace("|", "\\|")).ToList();
+
+            sb.Append("| ");
+            sb.Append(string.Join(" | ", cellTexts));
+            sb.AppendLine(" |");
+
+            // Add separator after header row
+            if (rowIndex == 0)
+            {
+                sb.Append("| ");
+                sb.Append(string.Join(" | ", cellTexts.Select(_ => "---")));
+                sb.AppendLine(" |");
+            }
+        }
+
+        return sb.ToString().TrimEnd();
+    }
 
     private static Paragraph CreateParagraph(string text, TextFormatting? textFormat, ParagraphFormatting? paragraphFormat)
     {
