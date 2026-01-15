@@ -143,13 +143,14 @@ public record ShapeOptions(
 );
 
 /// <summary>
-/// Result of a document operation.
+/// Result of a document operation with actionable error information.
 /// </summary>
 public record DocumentResult(
     bool Success,
     string Message,
     string? FilePath = null,
-    string? AdditionalInfo = null
+    string? AdditionalInfo = null,
+    string? Suggestion = null
 );
 
 /// <summary>
