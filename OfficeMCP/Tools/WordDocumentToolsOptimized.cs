@@ -7,17 +7,18 @@ using System.Text.Json;
 namespace OfficeMCP.Tools;
 
 /// <summary>
-/// AI-Optimized MCP Tools for Word documents. 
-/// Consolidated tools with simplified descriptions and tool annotations for better AI discoverability.
+/// LEGACY: Format-specific Word tools - kept for backward compatibility.
+/// Use the unified office_* tools from OfficeDocumentToolsConsolidated instead.
+/// This class is no longer registered as an MCP tool provider.
 /// </summary>
-[McpServerToolType]
+// [McpServerToolType] - Disabled: Use consolidated office_* tools instead
 public sealed class WordDocumentToolsOptimized(IWordDocumentService wordService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     #region Core Document Operations
 
-    [McpServerTool(Name = "word_create", Destructive = false, ReadOnly = false), Description("Creates a Word document (.docx). Use 'markdown' for formatted content. Supports: # headings, **bold**, *italic*, - lists, | tables |, ![images](path).")]
+    // [McpServerTool] - Disabled: Use office_create instead
     public string CreateWordDocument(
         [Description("Full path (e.g., C:/docs/report.docx)")] string filePath,
         [Description("Document title as Heading 1")] string? title = null,

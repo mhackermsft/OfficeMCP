@@ -18,10 +18,16 @@ public interface IExcelDocumentService
     DocumentResult SetRowHeight(string filePath, string sheetName, int rowIndex, double height);
     DocumentResult AddFormula(string filePath, string sheetName, string cellReference, string formula);
     DocumentResult AutoFitColumn(string filePath, string sheetName, int columnIndex);
+    DocumentResult ResizeTableToIncludeRange(string filePath, string sheetName, string startCell, string endCell);
+    DocumentResult FormatCellRange(string filePath, string sheetName, string startCell, string endCell, ExcelCellFormatting formatting);
     ContentResult GetCellValue(string filePath, string sheetName, string cellReference);
     ContentResult GetRangeValues(string filePath, string sheetName, string startCell, string endCell);
     ContentResult GetSheetText(string filePath, string sheetName);
     ContentResult GetAllSheetsText(string filePath);
     DocumentResult DeleteSheet(string filePath, string sheetName);
     DocumentResult RenameSheet(string filePath, string oldName, string newName);
+    
+    // Formatting info methods
+    ExcelRangeFormattingResult GetCellFormatting(string filePath, string sheetName, string cellReference);
+    ExcelRangeFormattingResult GetRangeFormatting(string filePath, string sheetName, string startCell, string endCell);
 }

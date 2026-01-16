@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
 using OfficeMCP.Services;
+using OfficeMCP.Tools;
 
 namespace OfficeMCP;
 
@@ -11,10 +12,14 @@ internal class Program
     {
         var builder = Host.CreateEmptyApplicationBuilder(settings: null);
         
-        // Register services
+        // Register format-specific services
         builder.Services.AddSingleton<IWordDocumentService, WordDocumentService>();
         builder.Services.AddSingleton<IExcelDocumentService, ExcelDocumentService>();
         builder.Services.AddSingleton<IPowerPointDocumentService, PowerPointDocumentService>();
+        builder.Services.AddSingleton<IPdfDocumentService, PdfDocumentService>();
+        
+        // Register new services for Phase 0
+        builder.Services.AddSingleton<IEncryptedDocumentHandler, EncryptedDocumentService>();
         
         // Configure MCP server with STDIO transport
         builder.Services
@@ -32,3 +37,4 @@ internal class Program
         await builder.Build().RunAsync();
     }
 }
+

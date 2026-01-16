@@ -7,17 +7,18 @@ using System.Text.Json;
 namespace OfficeMCP.Tools;
 
 /// <summary>
-/// AI-Optimized MCP Tools for PowerPoint presentations.
-/// Consolidated tools with simplified descriptions and tool annotations for better AI discoverability.
+/// LEGACY: Format-specific PowerPoint tools - kept for backward compatibility.
+/// Use the unified office_* tools from OfficeDocumentToolsConsolidated instead.
+/// This class is no longer registered as an MCP tool provider.
 /// </summary>
-[McpServerToolType]
+// [McpServerToolType] - Disabled: Use consolidated office_* tools instead
 public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService powerPointService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     #region Core Presentation Operations
 
-    [McpServerTool(Name = "pptx_create", Destructive = false, ReadOnly = false), Description("Creates a PowerPoint presentation (.pptx) with optional title slide.")]
+    // [McpServerTool] - Disabled: Use office_create instead
     public string CreatePowerPointPresentation(
         [Description("Full path (e.g., C:/slides/demo.pptx)")] string filePath,
         [Description("Title for first slide")] string? title = null,

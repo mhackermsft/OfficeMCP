@@ -149,7 +149,7 @@ public record DocumentResult(
     bool Success,
     string Message,
     string? FilePath = null,
-    string? AdditionalInfo = null,
+    string? Format = null,
     string? Suggestion = null
 );
 
@@ -161,7 +161,9 @@ public record ContentResult(
     string? Content,
     string? ErrorMessage = null,
     int? TotalParagraphs = null,
-    int? TotalPages = null
+    int? TotalPages = null,
+    string? Format = null,
+    string? Suggestion = null
 );
 
 // ============================================
@@ -228,7 +230,14 @@ public record ExcelOperation(
     bool? Bold = null,
     bool? Italic = null,
     bool? WrapText = null,
-    string? NewSheetName = null
+    string? NewSheetName = null,
+    // Additional formatting properties
+    string? FontColor = null,
+    string? FillColor = null,
+    string? NumberFormat = null,
+    string? HorizontalAlignment = null,
+    string? VerticalAlignment = null,
+    string? BorderStyle = null
 );
 
 /// <summary>
@@ -282,4 +291,48 @@ public record OperationOutcome(
     string OperationType,
     bool Success,
     string Message
+);
+
+// ============================================
+// Excel Formatting Models
+// ============================================
+
+/// <summary>
+/// Result of getting cell/range formatting information.
+/// </summary>
+public record ExcelRangeFormattingResult(
+    bool Success,
+    string? ErrorMessage,
+    List<ExcelCellInfo>? Cells,
+    string? SheetName,
+    string? Range
+);
+
+/// <summary>
+/// Information about a single Excel cell including value and formatting.
+/// </summary>
+public record ExcelCellInfo(
+    string CellReference,
+    string? Value,
+    string? Formula,
+    ExcelCellFormattingInfo? Formatting
+);
+
+/// <summary>
+/// Detailed formatting information for an Excel cell.
+/// </summary>
+public record ExcelCellFormattingInfo(
+    bool Bold,
+    bool Italic,
+    bool Underline,
+    string? FontName,
+    double? FontSize,
+    string? FontColor,
+    string? BackgroundColor,
+    string? NumberFormat,
+    string HorizontalAlignment,
+    string VerticalAlignment,
+    bool WrapText,
+    bool HasBorder,
+    string? BorderStyle
 );

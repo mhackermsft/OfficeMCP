@@ -7,15 +7,43 @@ using System.Text.Json;
 namespace OfficeMCP.Tools;
 
 /// <summary>
-/// AI-Optimized MCP Tools for Excel workbooks.
-/// Consolidated tools with simplified descriptions and tool annotations for better AI discoverability.
+/// LEGACY: Format-specific Excel tools - kept for backward compatibility.
+/// Use the unified office_* tools from OfficeDocumentToolsConsolidated instead.
+/// This class is no longer registered as an MCP tool provider.
 /// </summary>
-[McpServerToolType]
+// [McpServerToolType] - Disabled: Use consolidated office_* tools instead
 public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     #region Core Workbook Operations
+
+    // [McpServerTool] - Disabled: Use office_create instead
+    public string CheckExcelFileProtection(
+        [Description("Path to the Excel workbook")] string filePath)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new { Success = false, Message = $"File not found: {filePath}" }, JsonOptions);
+
+        var protectionInfo = OfficeMCP.Services.OfficeFileProtectionDetector.CheckFileProtection(filePath);
+        
+        return JsonSerializer.Serialize(new
+        {
+            Success = true,
+            FilePath = filePath,
+            IsProtected = protectionInfo.IsProtected,
+            IsEncrypted = protectionInfo.IsEncrypted,
+            MayHaveSensitivityLabel = protectionInfo.MayHaveSensitivityLabel,
+            IsValidOfficeFormat = protectionInfo.IsValidOfficeFormat,
+            ProtectionType = protectionInfo.ProtectionType,
+            CanBeOpened = !protectionInfo.IsEncrypted && protectionInfo.IsValidOfficeFormat,
+            Message = protectionInfo.IsEncrypted 
+                ? OfficeMCP.Services.OfficeFileProtectionDetector.GetProtectionErrorMessage(protectionInfo, filePath)
+                : protectionInfo.IsValidOfficeFormat 
+                    ? "File can be opened and read" 
+                    : protectionInfo.ErrorMessage
+        }, JsonOptions);
+    }
 
     [McpServerTool(Name = "excel_create", Destructive = false, ReadOnly = false), Description("Creates an Excel workbook (.xlsx) with optional initial data as a table.")]
     public string CreateExcelWorkbook(
@@ -50,17 +78,42 @@ public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelServi
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
-    [McpServerTool(Name = "excel_read", Destructive = false, ReadOnly = true), Description("Reads content from an Excel workbook. Returns all sheets by default, or specific sheet/cell/range.")]
+    [McpServerTool(Name = "excel_read", Destructive = false, ReadOnly = true), Description("Reads content from an Excel workbook. Returns all sheets by default, or specific sheet/cell/range. Can optionally include formatting information.")]
     public string ReadExcelWorkbook(
         [Description("Path to the workbook")] string filePath,
         [Description("allSheets (default), sheet, cell, or range")] string readType = "allSheets",
         [Description("Sheet name (required for sheet/cell/range)")] string? sheetName = null,
         [Description("Cell reference for 'cell' mode (e.g., A1)")] string? cellReference = null,
         [Description("Start cell for 'range' mode")] string? startCell = null,
-        [Description("End cell for 'range' mode")] string? endCell = null)
+        [Description("End cell for 'range' mode")] string? endCell = null,
+        [Description("Include formatting info (background color, font, borders, etc.). Only works with 'cell' and 'range' modes.")] bool includeFormatting = false)
     {
         if (!File.Exists(filePath))
             return JsonSerializer.Serialize(new ContentResult(false, null, $"File not found: {filePath}. Use excel_create to create a workbook first."), JsonOptions);
+
+        // If includeFormatting is requested for cell or range mode, use the formatting methods
+        if (includeFormatting && (readType.Equals("cell", StringComparison.OrdinalIgnoreCase) || readType.Equals("range", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (string.IsNullOrEmpty(sheetName))
+                return JsonSerializer.Serialize(new ContentResult(false, null, "sheetName is required when includeFormatting is true"), JsonOptions);
+
+            if (readType.Equals("cell", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(cellReference))
+                    return JsonSerializer.Serialize(new ContentResult(false, null, "cellReference is required when readType is 'cell'"), JsonOptions);
+                
+                var formattingResult = excelService.GetCellFormatting(filePath, sheetName, cellReference);
+                return JsonSerializer.Serialize(formattingResult, JsonOptions);
+            }
+            else // range
+            {
+                if (string.IsNullOrEmpty(startCell) || string.IsNullOrEmpty(endCell))
+                    return JsonSerializer.Serialize(new ContentResult(false, null, "startCell and endCell are required when readType is 'range'"), JsonOptions);
+                
+                var formattingResult = excelService.GetRangeFormatting(filePath, sheetName, startCell, endCell);
+                return JsonSerializer.Serialize(formattingResult, JsonOptions);
+            }
+        }
 
         ContentResult result = readType.ToLowerInvariant() switch
         {
@@ -75,6 +128,21 @@ public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelServi
             _ => excelService.GetAllSheetsText(filePath)
         };
 
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "excel_get_formatting", Destructive = false, ReadOnly = true), Description("Gets detailed formatting information for cells including background color, font properties, borders, alignment, and number format.")]
+    public string GetExcelCellFormatting(
+        [Description("Path to the workbook")] string filePath,
+        [Description("Sheet name")] string sheetName,
+        [Description("Starting cell reference (e.g., A1)")] string startCell,
+        [Description("Ending cell reference for range (e.g., C10). If not provided, gets formatting for single cell.")] string? endCell = null)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new ExcelRangeFormattingResult(false, $"File not found: {filePath}", null, null, null), JsonOptions);
+
+        var actualEndCell = endCell ?? startCell;
+        var result = excelService.GetRangeFormatting(filePath, sheetName, startCell, actualEndCell);
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
@@ -143,14 +211,50 @@ public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelServi
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
+    [McpServerTool(Name = "excel_format_cells", Destructive = false, ReadOnly = false), Description("Formats cells in an Excel workbook. Supports fill color, font formatting, borders, alignment, and number formats.")]
+    public string FormatExcelCells(
+        [Description("Path to the workbook")] string filePath,
+        [Description("Sheet name")] string sheetName,
+        [Description("Starting cell (e.g., A1)")] string startCell,
+        [Description("Ending cell for range (e.g., C10). If not provided, formats single cell.")] string? endCell = null,
+        [Description("Background/fill color as hex (e.g., #FFFF00 for yellow)")] string? fillColor = null,
+        [Description("Font color as hex (e.g., #FF0000 for red)")] string? fontColor = null,
+        [Description("Bold text")] bool bold = false,
+        [Description("Italic text")] bool italic = false,
+        [Description("Wrap text in cell")] bool wrapText = false,
+        [Description("Horizontal alignment: Left, Center, Right, Justify, General")] string horizontalAlignment = "General",
+        [Description("Vertical alignment: Top, Center, Bottom")] string verticalAlignment = "Bottom",
+        [Description("Border style: thin, medium, thick, double, dashed, dotted")] string? borderStyle = null,
+        [Description("Number format (e.g., #,##0.00 for numbers, mm/dd/yyyy for dates)")] string? numberFormat = null)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new DocumentResult(false, $"File not found: {filePath}", Suggestion: "Use excel_create to create the workbook first"), JsonOptions);
+
+        var formatting = new ExcelCellFormatting(
+            Bold: bold,
+            Italic: italic,
+            FontColor: fontColor,
+            BackgroundColor: fillColor,
+            NumberFormat: numberFormat,
+            HorizontalAlignment: horizontalAlignment,
+            VerticalAlignment: verticalAlignment,
+            WrapText: wrapText,
+            BorderStyle: borderStyle
+        );
+
+        var actualEndCell = endCell ?? startCell;
+        var result = excelService.FormatCellRange(filePath, sheetName, startCell, actualEndCell, formatting);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
     #endregion
 
     #region Batch Operations
 
-    [McpServerTool(Name = "excel_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations. Types: addSheet, deleteSheet, renameSheet, setCellValue, setRangeValues, addTable, addFormula, mergeCells, setColumnWidth, setRowHeight, addImage.")]
+    [McpServerTool(Name = "excel_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations. Types: addSheet, deleteSheet, renameSheet, setCellValue, setRangeValues, addTable, addFormula, mergeCells, setColumnWidth, setRowHeight, addImage, formatCells.")]
     public string BatchModifyExcelWorkbook(
         [Description("Path to the workbook")] string filePath,
-        [Description("JSON array: [{\"type\":\"addSheet\",\"sheetName\":\"Data\"}, {\"type\":\"addFormula\",\"sheetName\":\"Data\",\"cellReference\":\"C1\",\"formula\":\"SUM(A1:B1)\"}]")] string operationsJson)
+        [Description("JSON array: [{\"type\":\"addSheet\",\"sheetName\":\"Data\"}, {\"type\":\"formatCells\",\"sheetName\":\"Data\",\"startCell\":\"A1\",\"endCell\":\"C1\",\"fillColor\":\"#FFFF00\",\"bold\":true}]")] string operationsJson)
     {
         if (!File.Exists(filePath))
             return JsonSerializer.Serialize(new DocumentResult(false, $"File not found: {filePath}", Suggestion: "Use excel_create to create the workbook first"), JsonOptions);
@@ -182,7 +286,8 @@ public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelServi
                         "setcolumnwidth" => ProcessSetColumnWidth(filePath, op),
                         "setrowheight" => ProcessSetRowHeight(filePath, op),
                         "addimage" => ProcessAddImage(filePath, op),
-                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSheet, deleteSheet, renameSheet, setCellValue, setRangeValues, addTable, addFormula, mergeCells, setColumnWidth, setRowHeight, addImage")
+                        "formatcells" => ProcessFormatCells(filePath, op),
+                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSheet, deleteSheet, renameSheet, setCellValue, setRangeValues, addTable, addFormula, mergeCells, setColumnWidth, setRowHeight, addImage, formatCells")
                     };
 
                     if (opResult.Success)
@@ -307,6 +412,27 @@ public sealed class ExcelDocumentToolsOptimized(IExcelDocumentService excelServi
             AltText: op.AltText
         );
         return excelService.AddImage(filePath, op.SheetName, op.ImagePath, op.CellReference, options);
+    }
+
+    private DocumentResult ProcessFormatCells(string filePath, ExcelOperation op)
+    {
+        if (string.IsNullOrWhiteSpace(op.SheetName) || string.IsNullOrWhiteSpace(op.StartCell))
+            return new DocumentResult(false, "Sheet name and start cell are required");
+        
+        var formatting = new ExcelCellFormatting(
+            Bold: op.Bold ?? false,
+            Italic: op.Italic ?? false,
+            FontColor: op.FontColor,
+            BackgroundColor: op.FillColor,
+            NumberFormat: op.NumberFormat,
+            HorizontalAlignment: op.HorizontalAlignment ?? "General",
+            VerticalAlignment: op.VerticalAlignment ?? "Bottom",
+            WrapText: op.WrapText ?? false,
+            BorderStyle: op.BorderStyle
+        );
+        
+        var endCell = op.EndCell ?? op.StartCell;
+        return excelService.FormatCellRange(filePath, op.SheetName, op.StartCell, endCell, formatting);
     }
 
     #endregion
