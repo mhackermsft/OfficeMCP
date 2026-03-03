@@ -112,7 +112,99 @@ public record CellRange(
 /// </summary>
 public record SlideLayoutOptions(
     string LayoutType = "Blank",
-    string? BackgroundColor = null
+    string? BackgroundColor = null,
+    GradientFillOptions? GradientBackground = null
+);
+
+/// <summary>
+/// Represents a single text run with its own formatting within a paragraph.
+/// Allows multiple differently-formatted segments within one text box.
+/// </summary>
+public record TextRun(
+    string Text,
+    TextFormatting? Format = null
+);
+
+/// <summary>
+/// Represents a single paragraph with optional formatting and multiple text runs.
+/// </summary>
+public record RichParagraph(
+    TextRun[]? Runs = null,
+    string? Text = null,
+    string Alignment = "Left",
+    double? SpacingBeforePt = null,
+    double? SpacingAfterPt = null,
+    double? LineSpacingPercent = null,
+    bool IsBullet = false,
+    string? BulletChar = null,
+    int? IndentLevel = null
+);
+
+/// <summary>
+/// Gradient stop with position (0-100) and color.
+/// </summary>
+public record GradientStop(
+    int Position,
+    string Color,
+    int? TransparencyPercent = null
+);
+
+/// <summary>
+/// Gradient fill options for shapes and backgrounds.
+/// </summary>
+public record GradientFillOptions(
+    GradientStop[] Stops,
+    double Angle = 0.0,
+    string GradientType = "Linear"
+);
+
+/// <summary>
+/// Line/connector options for PowerPoint.
+/// </summary>
+public record LineOptions(
+    long X1,
+    long Y1,
+    long X2,
+    long Y2,
+    string? LineColor = null,
+    double LineWidth = 1.0,
+    string DashStyle = "Solid",
+    string? StartArrow = null,
+    string? EndArrow = null
+);
+
+/// <summary>
+/// Connector options for connecting two shapes.
+/// </summary>
+public record ConnectorOptions(
+    long X1,
+    long Y1,
+    long X2,
+    long Y2,
+    string ConnectorType = "Straight",
+    string? LineColor = null,
+    double LineWidth = 1.0,
+    string DashStyle = "Solid",
+    string? StartArrow = null,
+    string? EndArrow = null
+);
+
+/// <summary>
+/// An item within a group shape.
+/// </summary>
+public record GroupShapeItem(
+    string ItemType,
+    long X,
+    long Y,
+    long Width,
+    long Height,
+    string? Text = null,
+    TextFormatting? TextFormat = null,
+    string? ShapeType = null,
+    string? FillColor = null,
+    string? BorderColor = null,
+    double BorderWidth = 1.0,
+    string? ImagePath = null
 );
 
 /// <summary>
@@ -125,7 +217,19 @@ public record TextBoxOptions(
     long Height,
     string? BackgroundColor = null,
     string? BorderColor = null,
-    TextFormatting? TextFormat = null
+    TextFormatting? TextFormat = null,
+    double BorderWidth = 1.0,
+    string VerticalAlignment = "Top",
+    double MarginLeftInches = 0.1,
+    double MarginRightInches = 0.1,
+    double MarginTopInches = 0.05,
+    double MarginBottomInches = 0.05,
+    bool WordWrap = true,
+    string AutoFit = "None",
+    double Rotation = 0.0,
+    string Alignment = "Left",
+    RichParagraph[]? Paragraphs = null,
+    GradientFillOptions? GradientFill = null
 );
 
 /// <summary>
@@ -139,7 +243,23 @@ public record ShapeOptions(
     long Height,
     string? FillColor = null,
     string? BorderColor = null,
-    double BorderWidth = 1.0
+    double BorderWidth = 1.0,
+    string? Text = null,
+    TextFormatting? TextFormat = null,
+    string TextAlignment = "Center",
+    string VerticalTextAlignment = "Middle",
+    double Rotation = 0.0,
+    int? CornerRadiusPt = null,
+    bool HasShadow = false,
+    string DashStyle = "Solid",
+    int TransparencyPercent = 0,
+    GradientFillOptions? GradientFill = null,
+    RichParagraph[]? Paragraphs = null,
+    double MarginLeftInches = 0.1,
+    double MarginRightInches = 0.1,
+    double MarginTopInches = 0.05,
+    double MarginBottomInches = 0.05,
+    bool NoFill = false
 );
 
 /// <summary>
@@ -279,13 +399,47 @@ public record PowerPointOperation(
     string? BorderColor = null,
     double? BorderWidth = null,
     bool? Bold = null,
+    bool? Italic = null,
+    bool? Underline = null,
     int? FontSize = null,
     string? FontColor = null,
+    string? FontName = null,
     string? AltText = null,
     string? Notes = null,
     int? SourceIndex = null,
     int? FromIndex = null,
-    int? ToIndex = null
+    int? ToIndex = null,
+    // Rich text support
+    string? Alignment = null,
+    string? VerticalAlignment = null,
+    string? ParagraphsJson = null,
+    // Shape enhancements
+    double? Rotation = null,
+    int? CornerRadiusPt = null,
+    bool? HasShadow = null,
+    string? DashStyle = null,
+    int? TransparencyPercent = null,
+    string? GradientJson = null,
+    bool? NoFill = null,
+    bool? WordWrap = null,
+    string? AutoFit = null,
+    // Line/connector support
+    double? X2Inches = null,
+    double? Y2Inches = null,
+    string? StartArrow = null,
+    string? EndArrow = null,
+    string? ConnectorType = null,
+    string? LineColor = null,
+    double? LineWidth = null,
+    // Group shape support
+    string? GroupItemsJson = null,
+    // Margin support
+    double? MarginLeftInches = null,
+    double? MarginRightInches = null,
+    double? MarginTopInches = null,
+    double? MarginBottomInches = null,
+    // Slide size
+    string? SlideSize = null
 );
 
 /// <summary>

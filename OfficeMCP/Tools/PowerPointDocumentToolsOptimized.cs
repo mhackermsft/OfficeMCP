@@ -121,34 +121,80 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
-    [McpServerTool(Name = "pptx_add_text", Destructive = false, ReadOnly = false), Description("Adds text or bullet points to a slide.")]
+    [McpServerTool(Name = "pptx_add_text", Destructive = false, ReadOnly = false), Description("Adds a text box to a slide. Supports single text or rich multi-run text with different formatting per run.")]
     public string AddPowerPointText(
         [Description("Path to the presentation")] string filePath,
         [Description("Slide index (0-based)")] int slideIndex,
-        [Description("Text content or first bullet")] string text,
+        [Description("Text content (for simple text box)")] string? text = null,
+        [Description("Rich text paragraphs as JSON: [{\"runs\":[{\"text\":\"Bold \",\"format\":{\"bold\":true}},{\"text\":\"normal\"}],\"alignment\":\"Center\"}]")] string? paragraphsJson = null,
         [Description("Additional bullets as JSON array: [\"Point 2\", \"Point 3\"]")] string? additionalPointsJson = null,
         [Description("X position in inches")] double xInches = 1.0,
         [Description("Y position in inches")] double yInches = 2.0,
         [Description("Width in inches")] double widthInches = 8.0,
         [Description("Height in inches")] double heightInches = 1.0,
         [Description("Font size")] int fontSize = 18,
-        [Description("Font color as hex")] string? fontColor = null)
+        [Description("Font color as hex")] string? fontColor = null,
+        [Description("Font name (e.g., Segoe UI, Calibri)")] string? fontName = null,
+        [Description("Bold text")] bool bold = false,
+        [Description("Italic text")] bool italic = false,
+        [Description("Horizontal alignment: Left, Center, Right, Justify")] string alignment = "Left",
+        [Description("Vertical alignment: Top, Middle, Bottom")] string verticalAlignment = "Top",
+        [Description("Background color as hex")] string? backgroundColor = null,
+        [Description("Border color as hex")] string? borderColor = null,
+        [Description("Border width in points")] double borderWidth = 1.0,
+        [Description("Word wrap text")] bool wordWrap = true,
+        [Description("Auto fit: None, ShrinkText, ResizeShape")] string autoFit = "None",
+        [Description("Rotation in degrees")] double rotation = 0.0,
+        [Description("Gradient fill as JSON: {\"stops\":[{\"position\":0,\"color\":\"FF0000\"},{\"position\":100,\"color\":\"0000FF\"}],\"angle\":90}")] string? gradientJson = null)
     {
-        var textFormat = new TextFormatting(FontSize: fontSize, FontColor: fontColor);
+        var textFormat = new TextFormatting(Bold: bold, Italic: italic, FontSize: fontSize, FontColor: fontColor, FontName: fontName);
+        
+        GradientFillOptions? gradient = null;
+        if (!string.IsNullOrWhiteSpace(gradientJson))
+        {
+            try { gradient = JsonSerializer.Deserialize<GradientFillOptions>(gradientJson, JsonOptions); }
+            catch (JsonException ex) { return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid gradient JSON: {ex.Message}"), JsonOptions); }
+        }
+
+        RichParagraph[]? paragraphs = null;
+        if (!string.IsNullOrWhiteSpace(paragraphsJson))
+        {
+            try { paragraphs = JsonSerializer.Deserialize<RichParagraph[]>(paragraphsJson, JsonOptions); }
+            catch (JsonException ex) { return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid paragraphs JSON: {ex.Message}"), JsonOptions); }
+        }
+
         var options = new TextBoxOptions(
             X: (long)(xInches * 914400),
             Y: (long)(yInches * 914400),
             Width: (long)(widthInches * 914400),
             Height: (long)(heightInches * 914400),
-            TextFormat: textFormat
+            TextFormat: textFormat,
+            Alignment: alignment,
+            VerticalAlignment: verticalAlignment,
+            BackgroundColor: backgroundColor,
+            BorderColor: borderColor,
+            BorderWidth: borderWidth,
+            WordWrap: wordWrap,
+            AutoFit: autoFit,
+            Rotation: rotation,
+            Paragraphs: paragraphs,
+            GradientFill: gradient
         );
 
+        // Rich text mode
+        if (paragraphs != null && paragraphs.Length > 0)
+        {
+            var result = powerPointService.AddRichTextBox(filePath, slideIndex, options);
+            return JsonSerializer.Serialize(result, JsonOptions);
+        }
+
+        // Bullet points mode
         if (!string.IsNullOrWhiteSpace(additionalPointsJson))
         {
             try
             {
                 var additionalPoints = JsonSerializer.Deserialize<string[]>(additionalPointsJson, JsonOptions) ?? [];
-                var allPoints = new[] { text }.Concat(additionalPoints).ToArray();
+                var allPoints = new[] { text ?? string.Empty }.Concat(additionalPoints).ToArray();
                 var result = powerPointService.AddBulletPoints(filePath, slideIndex, allPoints, options);
                 return JsonSerializer.Serialize(result, JsonOptions);
             }
@@ -158,10 +204,11 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             }
         }
 
-        return JsonSerializer.Serialize(powerPointService.AddTextBox(filePath, slideIndex, text, options), JsonOptions);
+        // Simple text mode
+        return JsonSerializer.Serialize(powerPointService.AddTextBox(filePath, slideIndex, text ?? string.Empty, options), JsonOptions);
     }
 
-    [McpServerTool(Name = "pptx_add_image", Destructive = false, ReadOnly = false), Description("Adds an image to a slide.")]
+    [McpServerTool(Name = "pptx_add_image", Destructive = false, ReadOnly = false), Description("Adds an image to a slide. Supports JPEG, PNG, GIF, BMP.")]
     public string AddPowerPointImage(
         [Description("Path to the presentation")] string filePath,
         [Description("Slide index (0-based)")] int slideIndex,
@@ -216,6 +263,207 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         }
     }
 
+    [McpServerTool(Name = "pptx_add_shape", Destructive = false, ReadOnly = false), Description("Adds a shape to a slide with optional text, gradient fill, shadow, rotation, transparency, and custom corner radius. Supports 100+ shape types including rectangle, roundRectangle, ellipse, triangle, diamond, pentagon, hexagon, chevron, arrow types, stars, hearts, clouds, flowchart shapes, callouts, braces, brackets, math symbols, gears, and more.")]
+    public string AddPowerPointShape(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Shape type: rectangle, roundRectangle, ellipse, triangle, diamond, pentagon, hexagon, chevron, rightArrow, leftArrow, star5, heart, cloud, leftBrace, rightBrace, leftBracket, rightBracket, flowChartProcess, flowChartDecision, callout1, donut, cube, ribbon, plus, and many more")] string shapeType,
+        [Description("X position in inches")] double xInches = 1.0,
+        [Description("Y position in inches")] double yInches = 2.0,
+        [Description("Width in inches")] double widthInches = 2.0,
+        [Description("Height in inches")] double heightInches = 2.0,
+        [Description("Fill color as hex (e.g., 4472C4)")] string? fillColor = null,
+        [Description("Border color as hex")] string? borderColor = null,
+        [Description("Border width in points")] double borderWidth = 1.0,
+        [Description("Text to display inside the shape")] string? text = null,
+        [Description("Font size for shape text")] int fontSize = 14,
+        [Description("Font color as hex for shape text")] string? fontColor = null,
+        [Description("Font name for shape text")] string? fontName = null,
+        [Description("Bold shape text")] bool bold = false,
+        [Description("Italic shape text")] bool italic = false,
+        [Description("Text horizontal alignment: Left, Center, Right")] string textAlignment = "Center",
+        [Description("Text vertical alignment: Top, Middle, Bottom")] string verticalTextAlignment = "Middle",
+        [Description("Rotation in degrees")] double rotation = 0.0,
+        [Description("Corner radius in points (for roundRectangle)")] int? cornerRadiusPt = null,
+        [Description("Add drop shadow")] bool hasShadow = false,
+        [Description("Border dash style: Solid, Dash, Dot, DashDot, LongDash")] string dashStyle = "Solid",
+        [Description("Fill transparency 0-100")] int transparencyPercent = 0,
+        [Description("Gradient fill JSON: {\"stops\":[{\"position\":0,\"color\":\"FF0000\"},{\"position\":100,\"color\":\"0000FF\"}],\"angle\":90}")] string? gradientJson = null,
+        [Description("Rich text paragraphs JSON (overrides text param)")] string? paragraphsJson = null,
+        [Description("No fill (transparent shape)")] bool noFill = false)
+    {
+        GradientFillOptions? gradient = null;
+        if (!string.IsNullOrWhiteSpace(gradientJson))
+        {
+            try { gradient = JsonSerializer.Deserialize<GradientFillOptions>(gradientJson, JsonOptions); }
+            catch (JsonException ex) { return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid gradient JSON: {ex.Message}"), JsonOptions); }
+        }
+
+        RichParagraph[]? paragraphs = null;
+        if (!string.IsNullOrWhiteSpace(paragraphsJson))
+        {
+            try { paragraphs = JsonSerializer.Deserialize<RichParagraph[]>(paragraphsJson, JsonOptions); }
+            catch (JsonException ex) { return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid paragraphs JSON: {ex.Message}"), JsonOptions); }
+        }
+
+        var textFormat = new TextFormatting(Bold: bold, Italic: italic, FontSize: fontSize, FontColor: fontColor, FontName: fontName);
+        var options = new ShapeOptions(
+            ShapeType: shapeType,
+            X: (long)(xInches * 914400),
+            Y: (long)(yInches * 914400),
+            Width: (long)(widthInches * 914400),
+            Height: (long)(heightInches * 914400),
+            FillColor: fillColor,
+            BorderColor: borderColor,
+            BorderWidth: borderWidth,
+            Text: text,
+            TextFormat: textFormat,
+            TextAlignment: textAlignment,
+            VerticalTextAlignment: verticalTextAlignment,
+            Rotation: rotation,
+            CornerRadiusPt: cornerRadiusPt,
+            HasShadow: hasShadow,
+            DashStyle: dashStyle,
+            TransparencyPercent: transparencyPercent,
+            GradientFill: gradient,
+            Paragraphs: paragraphs,
+            NoFill: noFill
+        );
+        var result = powerPointService.AddShape(filePath, slideIndex, options);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_add_line", Destructive = false, ReadOnly = false), Description("Adds a line to a slide. Supports arrow heads, dash styles, and custom thickness.")]
+    public string AddPowerPointLine(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Start X position in inches")] double x1Inches,
+        [Description("Start Y position in inches")] double y1Inches,
+        [Description("End X position in inches")] double x2Inches,
+        [Description("End Y position in inches")] double y2Inches,
+        [Description("Line color as hex (default: black)")] string? lineColor = null,
+        [Description("Line width in points")] double lineWidth = 1.0,
+        [Description("Dash style: Solid, Dash, Dot, DashDot, LongDash")] string dashStyle = "Solid",
+        [Description("Start arrow type: None, Triangle, Stealth, Diamond, Oval, Open")] string? startArrow = null,
+        [Description("End arrow type: None, Triangle, Stealth, Diamond, Oval, Open")] string? endArrow = null)
+    {
+        var options = new LineOptions(
+            X1: (long)(x1Inches * 914400),
+            Y1: (long)(y1Inches * 914400),
+            X2: (long)(x2Inches * 914400),
+            Y2: (long)(y2Inches * 914400),
+            LineColor: lineColor,
+            LineWidth: lineWidth,
+            DashStyle: dashStyle,
+            StartArrow: startArrow,
+            EndArrow: endArrow
+        );
+        var result = powerPointService.AddLine(filePath, slideIndex, options);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_add_connector", Destructive = false, ReadOnly = false), Description("Adds a connector (straight, elbow, or curved) between two points on a slide. Supports arrow heads and dash styles.")]
+    public string AddPowerPointConnector(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Start X position in inches")] double x1Inches,
+        [Description("Start Y position in inches")] double y1Inches,
+        [Description("End X position in inches")] double x2Inches,
+        [Description("End Y position in inches")] double y2Inches,
+        [Description("Connector type: Straight, Elbow, Curved")] string connectorType = "Straight",
+        [Description("Line color as hex")] string? lineColor = null,
+        [Description("Line width in points")] double lineWidth = 1.0,
+        [Description("Dash style: Solid, Dash, Dot, DashDot, LongDash")] string dashStyle = "Solid",
+        [Description("Start arrow type: None, Triangle, Stealth, Diamond, Oval, Open")] string? startArrow = null,
+        [Description("End arrow type: None, Triangle, Stealth, Diamond, Oval, Open")] string? endArrow = null)
+    {
+        var options = new ConnectorOptions(
+            X1: (long)(x1Inches * 914400),
+            Y1: (long)(y1Inches * 914400),
+            X2: (long)(x2Inches * 914400),
+            Y2: (long)(y2Inches * 914400),
+            ConnectorType: connectorType,
+            LineColor: lineColor,
+            LineWidth: lineWidth,
+            DashStyle: dashStyle,
+            StartArrow: startArrow,
+            EndArrow: endArrow
+        );
+        var result = powerPointService.AddConnector(filePath, slideIndex, options);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_add_group", Destructive = false, ReadOnly = false), Description("Adds a group of shapes to a slide. Items inside the group are positioned relative to the group's coordinate space.")]
+    public string AddPowerPointGroupShape(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Group X position in inches")] double xInches,
+        [Description("Group Y position in inches")] double yInches,
+        [Description("Group width in inches")] double widthInches,
+        [Description("Group height in inches")] double heightInches,
+        [Description("Group items as JSON: [{\"itemType\":\"shape\",\"x\":0,\"y\":0,\"width\":914400,\"height\":914400,\"shapeType\":\"rectangle\",\"fillColor\":\"FF0000\",\"text\":\"Box 1\"},{\"itemType\":\"textbox\",\"x\":914400,\"y\":0,\"width\":914400,\"height\":914400,\"text\":\"Label\"}]")] string groupItemsJson)
+    {
+        try
+        {
+            var items = JsonSerializer.Deserialize<GroupShapeItem[]>(groupItemsJson, JsonOptions);
+            if (items == null || items.Length == 0)
+                return JsonSerializer.Serialize(new DocumentResult(false, "No group items provided"), JsonOptions);
+
+            var result = powerPointService.AddGroupShape(
+                filePath, slideIndex,
+                (long)(xInches * 914400), (long)(yInches * 914400),
+                (long)(widthInches * 914400), (long)(heightInches * 914400),
+                items);
+            return JsonSerializer.Serialize(result, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid JSON: {ex.Message}"), JsonOptions);
+        }
+    }
+
+    [McpServerTool(Name = "pptx_set_slide_size", Destructive = false, ReadOnly = false), Description("Sets the slide size for the presentation. Affects all slides.")]
+    public string SetPowerPointSlideSize(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide size: Widescreen (16:9), Standard (4:3), Widescreen16x10 (16:10), A4, Letter")] string size = "Widescreen")
+    {
+        var result = powerPointService.SetSlideSize(filePath, size);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_set_background", Destructive = false, ReadOnly = false), Description("Sets the background of a slide to a solid color or gradient.")]
+    public string SetPowerPointBackground(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Solid background color as hex (e.g., FFFFFF)")] string? color = null,
+        [Description("Gradient fill JSON: {\"stops\":[{\"position\":0,\"color\":\"003366\"},{\"position\":100,\"color\":\"99CCFF\"}],\"angle\":270}")] string? gradientJson = null)
+    {
+        if (!string.IsNullOrWhiteSpace(gradientJson))
+        {
+            try
+            {
+                var gradient = JsonSerializer.Deserialize<GradientFillOptions>(gradientJson, JsonOptions);
+                if (gradient != null)
+                {
+                    var result = powerPointService.SetSlideBackgroundGradient(filePath, slideIndex, gradient);
+                    return JsonSerializer.Serialize(result, JsonOptions);
+                }
+            }
+            catch (JsonException ex)
+            {
+                return JsonSerializer.Serialize(new DocumentResult(false, $"Invalid gradient JSON: {ex.Message}"), JsonOptions);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(color))
+        {
+            var result = powerPointService.SetSlideBackground(filePath, slideIndex, color);
+            return JsonSerializer.Serialize(result, JsonOptions);
+        }
+
+        return JsonSerializer.Serialize(new DocumentResult(false, "Provide either color or gradientJson"), JsonOptions);
+    }
+
     [McpServerTool(Name = "pptx_add_notes", Destructive = false, ReadOnly = false), Description("Adds speaker notes to a slide.")]
     public string AddPowerPointSpeakerNotes(
         [Description("Path to the presentation")] string filePath,
@@ -230,10 +478,10 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
 
     #region Batch Operations
 
-    [McpServerTool(Name = "pptx_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations. Types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, addTitle, addTextBox, addBulletPoints, addImage, addShape, addTable, addSpeakerNotes.")]
+    [McpServerTool(Name = "pptx_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations on a presentation in a single call. Types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes.")]
     public string BatchModifyPowerPointPresentation(
         [Description("Path to the presentation")] string filePath,
-        [Description("JSON array: [{\"type\":\"addSlide\"}, {\"type\":\"addTitle\",\"slideIndex\":1,\"title\":\"Intro\"}]")] string operationsJson)
+        [Description("JSON array of operations, e.g.: [{\"type\":\"addSlide\"}, {\"type\":\"addShape\",\"slideIndex\":0,\"shapeType\":\"roundRectangle\",\"xInches\":1,\"yInches\":1,\"widthInches\":3,\"heightInches\":1,\"fillColor\":\"4472C4\",\"text\":\"Hello\",\"fontColor\":\"FFFFFF\",\"bold\":true}]")] string operationsJson)
     {
         if (!File.Exists(filePath))
             return JsonSerializer.Serialize(new DocumentResult(false, $"File not found: {filePath}", Suggestion: "Use pptx_create to create the presentation first"), JsonOptions);
@@ -259,14 +507,20 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
                         "duplicateslide" => ProcessDuplicateSlide(filePath, op),
                         "reorderslide" => ProcessReorderSlide(filePath, op),
                         "setbackground" => ProcessSetBackground(filePath, op),
+                        "setbackgroundgradient" => ProcessSetBackgroundGradient(filePath, op),
+                        "setslidesize" => ProcessSetSlideSize(filePath, op),
                         "addtitle" => ProcessAddTitle(filePath, op),
                         "addtextbox" => ProcessAddTextBox(filePath, op),
+                        "addrichtextbox" => ProcessAddRichTextBox(filePath, op),
                         "addbulletpoints" => ProcessAddBulletPoints(filePath, op),
                         "addimage" => ProcessAddImage(filePath, op),
                         "addshape" => ProcessAddShape(filePath, op),
+                        "addline" => ProcessAddLine(filePath, op),
+                        "addconnector" => ProcessAddConnector(filePath, op),
+                        "addgroupshape" => ProcessAddGroupShape(filePath, op),
                         "addtable" => ProcessAddTable(filePath, op),
                         "addspeakernotes" => ProcessAddSpeakerNotes(filePath, op),
-                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, addTitle, addTextBox, addBulletPoints, addImage, addShape, addTable, addSpeakerNotes")
+                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes")
                     };
 
                     if (opResult.Success)
@@ -358,9 +612,15 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             return new DocumentResult(false, "Slide index and text are required");
         var textFormat = new TextFormatting(
             Bold: op.Bold ?? false,
+            Italic: op.Italic ?? false,
+            Underline: op.Underline ?? false,
             FontSize: op.FontSize ?? 18,
-            FontColor: op.FontColor
+            FontColor: op.FontColor,
+            FontName: op.FontName
         );
+
+        GradientFillOptions? gradient = ParseGradient(op.GradientJson);
+
         var options = new TextBoxOptions(
             X: (long)((op.XInches ?? 1.0) * 914400),
             Y: (long)((op.YInches ?? 2.0) * 914400),
@@ -368,16 +628,64 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             Height: (long)((op.HeightInches ?? 1.0) * 914400),
             BackgroundColor: op.BackgroundColor,
             BorderColor: op.BorderColor,
-            TextFormat: textFormat
+            BorderWidth: op.BorderWidth ?? 1.0,
+            TextFormat: textFormat,
+            Alignment: op.Alignment ?? "Left",
+            VerticalAlignment: op.VerticalAlignment ?? "Top",
+            WordWrap: op.WordWrap ?? true,
+            AutoFit: op.AutoFit ?? "None",
+            Rotation: op.Rotation ?? 0.0,
+            GradientFill: gradient,
+            MarginLeftInches: op.MarginLeftInches ?? 0.1,
+            MarginRightInches: op.MarginRightInches ?? 0.1,
+            MarginTopInches: op.MarginTopInches ?? 0.05,
+            MarginBottomInches: op.MarginBottomInches ?? 0.05
         );
         return powerPointService.AddTextBox(filePath, op.SlideIndex.Value, op.Text, options);
+    }
+
+    private DocumentResult ProcessAddRichTextBox(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.ParagraphsJson))
+            return new DocumentResult(false, "Slide index and paragraphsJson are required");
+
+        RichParagraph[]? paragraphs;
+        try { paragraphs = JsonSerializer.Deserialize<RichParagraph[]>(op.ParagraphsJson, JsonOptions); }
+        catch (JsonException ex) { return new DocumentResult(false, $"Invalid paragraphs JSON: {ex.Message}"); }
+        
+        if (paragraphs == null || paragraphs.Length == 0)
+            return new DocumentResult(false, "No paragraphs provided");
+
+        GradientFillOptions? gradient = ParseGradient(op.GradientJson);
+
+        var options = new TextBoxOptions(
+            X: (long)((op.XInches ?? 1.0) * 914400),
+            Y: (long)((op.YInches ?? 2.0) * 914400),
+            Width: (long)((op.WidthInches ?? 8.0) * 914400),
+            Height: (long)((op.HeightInches ?? 1.0) * 914400),
+            BackgroundColor: op.BackgroundColor,
+            BorderColor: op.BorderColor,
+            BorderWidth: op.BorderWidth ?? 1.0,
+            Alignment: op.Alignment ?? "Left",
+            VerticalAlignment: op.VerticalAlignment ?? "Top",
+            WordWrap: op.WordWrap ?? true,
+            AutoFit: op.AutoFit ?? "None",
+            Rotation: op.Rotation ?? 0.0,
+            Paragraphs: paragraphs,
+            GradientFill: gradient,
+            MarginLeftInches: op.MarginLeftInches ?? 0.1,
+            MarginRightInches: op.MarginRightInches ?? 0.1,
+            MarginTopInches: op.MarginTopInches ?? 0.05,
+            MarginBottomInches: op.MarginBottomInches ?? 0.05
+        );
+        return powerPointService.AddRichTextBox(filePath, op.SlideIndex.Value, options);
     }
 
     private DocumentResult ProcessAddBulletPoints(string filePath, PowerPointOperation op)
     {
         if (!op.SlideIndex.HasValue || op.Points == null || op.Points.Length == 0)
             return new DocumentResult(false, "Slide index and points are required");
-        var textFormat = new TextFormatting(FontSize: op.FontSize ?? 18, FontColor: op.FontColor);
+        var textFormat = new TextFormatting(FontSize: op.FontSize ?? 18, FontColor: op.FontColor, FontName: op.FontName);
         var options = new TextBoxOptions(
             X: (long)((op.XInches ?? 1.0) * 914400),
             Y: (long)((op.YInches ?? 2.0) * 914400),
@@ -405,6 +713,18 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
     {
         if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.ShapeType))
             return new DocumentResult(false, "Slide index and shape type are required");
+
+        var textFormat = new TextFormatting(
+            Bold: op.Bold ?? false,
+            Italic: op.Italic ?? false,
+            FontSize: op.FontSize ?? 14,
+            FontColor: op.FontColor,
+            FontName: op.FontName
+        );
+
+        GradientFillOptions? gradient = ParseGradient(op.GradientJson);
+        RichParagraph[]? paragraphs = ParseParagraphs(op.ParagraphsJson);
+
         var options = new ShapeOptions(
             ShapeType: op.ShapeType,
             X: (long)((op.XInches ?? 1.0) * 914400),
@@ -413,9 +733,113 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             Height: (long)((op.HeightInches ?? 2.0) * 914400),
             FillColor: op.FillColor,
             BorderColor: op.BorderColor,
-            BorderWidth: op.BorderWidth ?? 1.0
+            BorderWidth: op.BorderWidth ?? 1.0,
+            Text: op.Text,
+            TextFormat: textFormat,
+            TextAlignment: op.Alignment ?? "Center",
+            VerticalTextAlignment: op.VerticalAlignment ?? "Middle",
+            Rotation: op.Rotation ?? 0.0,
+            CornerRadiusPt: op.CornerRadiusPt,
+            HasShadow: op.HasShadow ?? false,
+            DashStyle: op.DashStyle ?? "Solid",
+            TransparencyPercent: op.TransparencyPercent ?? 0,
+            GradientFill: gradient,
+            Paragraphs: paragraphs,
+            NoFill: op.NoFill ?? false,
+            MarginLeftInches: op.MarginLeftInches ?? 0.1,
+            MarginRightInches: op.MarginRightInches ?? 0.1,
+            MarginTopInches: op.MarginTopInches ?? 0.05,
+            MarginBottomInches: op.MarginBottomInches ?? 0.05
         );
         return powerPointService.AddShape(filePath, op.SlideIndex.Value, options);
+    }
+
+    private DocumentResult ProcessAddLine(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue)
+            return new DocumentResult(false, "Slide index is required");
+        var options = new LineOptions(
+            X1: (long)((op.XInches ?? 0) * 914400),
+            Y1: (long)((op.YInches ?? 0) * 914400),
+            X2: (long)((op.X2Inches ?? 1) * 914400),
+            Y2: (long)((op.Y2Inches ?? 0) * 914400),
+            LineColor: op.LineColor ?? op.BorderColor,
+            LineWidth: op.LineWidth ?? op.BorderWidth ?? 1.0,
+            DashStyle: op.DashStyle ?? "Solid",
+            StartArrow: op.StartArrow,
+            EndArrow: op.EndArrow
+        );
+        return powerPointService.AddLine(filePath, op.SlideIndex.Value, options);
+    }
+
+    private DocumentResult ProcessAddConnector(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue)
+            return new DocumentResult(false, "Slide index is required");
+        var options = new ConnectorOptions(
+            X1: (long)((op.XInches ?? 0) * 914400),
+            Y1: (long)((op.YInches ?? 0) * 914400),
+            X2: (long)((op.X2Inches ?? 1) * 914400),
+            Y2: (long)((op.Y2Inches ?? 0) * 914400),
+            ConnectorType: op.ConnectorType ?? "Straight",
+            LineColor: op.LineColor ?? op.BorderColor,
+            LineWidth: op.LineWidth ?? op.BorderWidth ?? 1.0,
+            DashStyle: op.DashStyle ?? "Solid",
+            StartArrow: op.StartArrow,
+            EndArrow: op.EndArrow
+        );
+        return powerPointService.AddConnector(filePath, op.SlideIndex.Value, options);
+    }
+
+    private DocumentResult ProcessAddGroupShape(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.GroupItemsJson))
+            return new DocumentResult(false, "Slide index and groupItemsJson are required");
+
+        GroupShapeItem[]? items;
+        try { items = JsonSerializer.Deserialize<GroupShapeItem[]>(op.GroupItemsJson, JsonOptions); }
+        catch (JsonException ex) { return new DocumentResult(false, $"Invalid group items JSON: {ex.Message}"); }
+
+        if (items == null || items.Length == 0)
+            return new DocumentResult(false, "No group items provided");
+
+        return powerPointService.AddGroupShape(
+            filePath, op.SlideIndex.Value,
+            (long)((op.XInches ?? 0) * 914400), (long)((op.YInches ?? 0) * 914400),
+            (long)((op.WidthInches ?? 5) * 914400), (long)((op.HeightInches ?? 5) * 914400),
+            items);
+    }
+
+    private DocumentResult ProcessSetBackgroundGradient(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.GradientJson))
+            return new DocumentResult(false, "Slide index and gradientJson are required");
+
+        GradientFillOptions? gradient = ParseGradient(op.GradientJson);
+        if (gradient == null)
+            return new DocumentResult(false, "Invalid gradient JSON");
+
+        return powerPointService.SetSlideBackgroundGradient(filePath, op.SlideIndex.Value, gradient);
+    }
+
+    private DocumentResult ProcessSetSlideSize(string filePath, PowerPointOperation op)
+    {
+        return powerPointService.SetSlideSize(filePath, op.SlideSize ?? "Widescreen");
+    }
+
+    // Helper methods for JSON parsing
+    private GradientFillOptions? ParseGradient(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<GradientFillOptions>(json, JsonOptions); }
+        catch { return null; }
+    }
+
+    private RichParagraph[]? ParseParagraphs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JsonSerializer.Deserialize<RichParagraph[]>(json, JsonOptions); }
+        catch { return null; }
     }
 
     private DocumentResult ProcessAddTable(string filePath, PowerPointOperation op)

@@ -784,6 +784,16 @@ public sealed class OfficeDocumentToolsConsolidated(
             "bulletlist" when !string.IsNullOrEmpty(content) =>
                 JsonSerializer.Serialize(pptService.AddBulletPoints(filePath, slideIndex, content.Split('\n'),
                     new TextBoxOptions((long)(1.0 * 914400), (long)(2.0 * 914400), (long)(8.0 * 914400), (long)(4.0 * 914400))), JsonOptions),
+            "shape" when !string.IsNullOrEmpty(content) =>
+                JsonSerializer.Serialize(pptService.AddShape(filePath, slideIndex,
+                    new ShapeOptions(ShapeType: "rectangle",
+                        X: (long)(1.0 * 914400), Y: (long)(2.0 * 914400),
+                        Width: (long)(width * 914400), Height: (long)(height * 914400),
+                        Text: content, FillColor: "4472C4")), JsonOptions),
+            "line" =>
+                JsonSerializer.Serialize(pptService.AddLine(filePath, slideIndex,
+                    new LineOptions(X1: (long)(1.0 * 914400), Y1: (long)(2.0 * 914400),
+                        X2: (long)((1.0 + width) * 914400), Y2: (long)(2.0 * 914400))), JsonOptions),
             _ => ErrorResult($"Element type '{elementType}' requires content", "Provide 'content' parameter")
         };
     }
