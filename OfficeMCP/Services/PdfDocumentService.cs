@@ -3,6 +3,7 @@ using System.Text;
 using OfficeMCP.Models;
 using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas;
+using iText.Kernel.Pdf.Xobject;
 using iText.Kernel.Geom;
 using iText.Layout;
 using iText.Layout.Element;
@@ -123,11 +124,11 @@ public ContentResult GetDocumentText(string filePath)
                     }
                     else if (line.StartsWith("- "))
                     {
-                        document.Add(new Paragraph("• " + line.Substring(2)).SetFont(regularFont).SetMarginLeft(20));
+                        document.Add(new Paragraph("ï¿½ " + line.Substring(2)).SetFont(regularFont).SetMarginLeft(20));
                     }
                     else if (line.StartsWith("* "))
                     {
-                        document.Add(new Paragraph("• " + line.Substring(2)).SetFont(regularFont).SetMarginLeft(20));
+                        document.Add(new Paragraph("ï¿½ " + line.Substring(2)).SetFont(regularFont).SetMarginLeft(20));
                     }
                     else if (line.StartsWith("> "))
                     {
@@ -654,6 +655,83 @@ public ContentResult GetDocumentText(string filePath)
         {
             return new ContentResult(false, null, $"Failed to read range: {ex.Message}");
         }
+    }
+
+    public IList<ImageExtractionResult> ExtractImages(string filePath)
+    {
+        var results = new List<ImageExtractionResult>();
+        try
+        {
+            if (!File.Exists(filePath)) return results;
+
+            using var reader = new PdfReader(filePath);
+            using var pdf = new PdfDocument(reader);
+            int pageCount = pdf.GetNumberOfPages();
+            int imageIndex = 0;
+
+            for (int page = 1; page <= pageCount; page++)
+            {
+                try
+                {
+                    var xObjectDict = pdf.GetPage(page).GetResources().GetResource(PdfName.XObject);
+                    if (xObjectDict == null) continue;
+
+                    foreach (var key in xObjectDict.KeySet())
+                    {
+                        try
+                        {
+                            var stream = xObjectDict.GetAsStream(key);
+                            if (stream == null) continue;
+
+                            if (!PdfName.Image.Equals(stream.GetAsName(PdfName.Subtype))) continue;
+
+                            var imageXObject = new PdfImageXObject(stream);
+                            var imageBytes = imageXObject.GetImageBytes();
+                            if (imageBytes == null || imageBytes.Length == 0) continue;
+
+                            // Determine MIME type from the image filter
+                            var filterName = stream.GetAsName(PdfName.Filter)?.GetValue()
+                                ?? stream.GetAsArray(PdfName.Filter)?.GetAsName(0)?.GetValue();
+                            var mimeType = filterName switch
+                            {
+                                "DCTDecode" => "image/jpeg",
+                                "JBIG2Decode" => "image/x-jbig2",
+                                "JPXDecode" => "image/jp2",
+                                _ => "image/png"
+                            };
+
+                            int? widthPx  = (int?)imageXObject.GetWidth();
+                            int? heightPx = (int?)imageXObject.GetHeight();
+
+                            results.Add(new ImageExtractionResult(
+                                Index: imageIndex++,
+                                MimeType: mimeType,
+                                ImageBase64: Convert.ToBase64String(imageBytes),
+                                AltText: string.Empty,
+                                ContextBefore: $"Page {page}",
+                                ContextAfter: string.Empty,
+                                WidthPx: widthPx,
+                                HeightPx: heightPx,
+                                PageOrSlideNumber: page
+                            ));
+                        }
+                        catch
+                        {
+                            // Skip problematic image
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip problematic page
+                }
+            }
+        }
+        catch
+        {
+            // Return whatever was collected
+        }
+        return results;
     }
 
     public DocumentResult AddEncryption(string filePath, string userPassword, string? ownerPassword = null)

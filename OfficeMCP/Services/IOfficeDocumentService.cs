@@ -35,4 +35,7 @@ public interface IOfficeDocumentService
     
     // Conversion
     ContentResult ConvertToMarkdown(string filePath);
+
+    // Image extraction (returns base64 image data + context for AI OCR/captioning)
+    IList<ImageExtractionResult> ExtractImages(string filePath);
 }

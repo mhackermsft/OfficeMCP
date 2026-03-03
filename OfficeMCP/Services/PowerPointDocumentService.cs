@@ -94,7 +94,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 slidePart.AddPart(slideLayoutPart);
             }
 
-            var slideIdList = presentationPart.Presentation.SlideIdList;
+            var slideIdList = presentationPart.Presentation!.SlideIdList;
             var maxSlideId = slideIdList?.Elements<SlideId>().Max(s => s.Id?.Value) ?? 255U;
 
             var slideId = new SlideId
@@ -124,7 +124,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             if (shapeTree == null)
                 return new DocumentResult(false, "Shape tree not found");
 
@@ -155,7 +155,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 shapeTree.Append(subtitleShape);
             }
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, "Title added successfully", filePath);
         }
         catch (Exception ex)
@@ -174,7 +174,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             if (shapeTree == null)
                 return new DocumentResult(false, "Shape tree not found");
 
@@ -191,7 +191,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             );
             shapeTree.Append(textShape);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, "Text box added successfully", filePath);
         }
         catch (Exception ex)
@@ -210,14 +210,14 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             if (shapeTree == null)
                 return new DocumentResult(false, "Shape tree not found");
 
             var bulletShape = CreateBulletShape(points, options);
             shapeTree.Append(bulletShape);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, $"Bullet list with {points.Length} items added", filePath);
         }
         catch (Exception ex)
@@ -250,10 +250,10 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             var relationshipId = slidePart.GetIdOfPart(imagePart);
             var picture = CreatePicture(relationshipId, x, y, options);
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             shapeTree?.Append(picture);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, "Image added successfully", filePath);
         }
         catch (Exception ex)
@@ -272,14 +272,14 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             if (shapeTree == null)
                 return new DocumentResult(false, "Shape tree not found");
 
             var shape = CreateShape(options);
             shapeTree.Append(shape);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, $"{options.ShapeType} shape added successfully", filePath);
         }
         catch (Exception ex)
@@ -301,14 +301,14 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var shapeTree = slidePart.Slide.CommonSlideData?.ShapeTree;
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
             if (shapeTree == null)
                 return new DocumentResult(false, "Shape tree not found");
 
             var graphicFrame = CreateTableGraphicFrame(data, x, y, width, height);
             shapeTree.Append(graphicFrame);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, $"Table with {data.Length} rows added successfully", filePath);
         }
         catch (Exception ex)
@@ -327,7 +327,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (slidePart == null)
                 return new DocumentResult(false, $"Slide {slideIndex} not found");
 
-            var commonSlideData = slidePart.Slide.CommonSlideData;
+            var commonSlideData = slidePart.Slide!.CommonSlideData;
             if (commonSlideData == null)
                 return new DocumentResult(false, "Common slide data not found");
 
@@ -347,7 +347,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
             commonSlideData.InsertAt(background, 0);
 
-            slidePart.Slide.Save();
+            slidePart.Slide!.Save();
             return new DocumentResult(true, $"Slide {slideIndex} background set to #{color.TrimStart('#')}", filePath);
         }
         catch (Exception ex)
@@ -366,7 +366,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (presentationPart == null)
                 return new DocumentResult(false, "Presentation part not found");
 
-            var slideIdList = presentationPart.Presentation.SlideIdList;
+            var slideIdList = presentationPart.Presentation!.SlideIdList;
             var slideIds = slideIdList?.Elements<SlideId>().ToList() ?? [];
             
             if (slideIndex < 0 || slideIndex >= slideIds.Count)
@@ -421,7 +421,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 }
             }
 
-            var slideIdList = presentationPart.Presentation.SlideIdList;
+            var slideIdList = presentationPart.Presentation!.SlideIdList;
             var maxSlideId = slideIdList?.Elements<SlideId>().Max(s => s.Id?.Value) ?? 255U;
 
             slideIdList?.Append(new SlideId
@@ -449,7 +449,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (presentationPart == null)
                 return new DocumentResult(false, "Presentation part not found");
 
-            var slideIdList = presentationPart.Presentation.SlideIdList;
+            var slideIdList = presentationPart.Presentation!.SlideIdList;
             var slideIds = slideIdList?.Elements<SlideId>().ToList() ?? [];
             
             if (fromIndex < 0 || fromIndex >= slideIds.Count)
@@ -519,7 +519,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             if (presentationPart == null)
                 return new ContentResult(false, null, "Presentation part not found");
 
-            var slideIds = presentationPart.Presentation.SlideIdList?.Elements<SlideId>().ToList() ?? [];
+            var slideIds = presentationPart.Presentation!.SlideIdList?.Elements<SlideId>().ToList() ?? [];
             var sb = new StringBuilder();
 
             for (int i = 0; i < slideIds.Count; i++)
@@ -549,7 +549,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 return new ContentResult(false, null, $"File not found: {filePath}");
 
             using var presentation = PresentationDocument.Open(filePath, false);
-            var slideCount = presentation.PresentationPart?.Presentation.SlideIdList?.Elements<SlideId>().Count() ?? 0;
+            var slideCount = presentation.PresentationPart?.Presentation!.SlideIdList?.Elements<SlideId>().Count() ?? 0;
             
             return new ContentResult(true, slideCount.ToString(), TotalPages: slideCount);
         }
@@ -576,7 +576,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 notesSlidePart.NotesSlide = CreateNotesSlide();
             }
 
-            var textBody = notesSlidePart.NotesSlide.Descendants<P.TextBody>().FirstOrDefault();
+            var textBody = notesSlidePart.NotesSlide!.Descendants<P.TextBody>().FirstOrDefault();
             if (textBody != null)
             {
                 textBody.RemoveAllChildren<A.Paragraph>();
@@ -585,7 +585,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 ));
             }
 
-            notesSlidePart.NotesSlide.Save();
+            notesSlidePart.NotesSlide!.Save();
             return new DocumentResult(true, $"Speaker notes added to slide {slideIndex}", filePath);
         }
         catch (Exception ex)
@@ -594,12 +594,88 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
         }
     }
 
+    public IList<ImageExtractionResult> ExtractImages(string filePath)
+    {
+        var results = new List<ImageExtractionResult>();
+        try
+        {
+            if (!File.Exists(filePath)) return results;
+
+            using var presentation = PresentationDocument.Open(filePath, false);
+            var presentationPart = presentation.PresentationPart;
+            if (presentationPart == null) return results;
+
+            var slideIds = presentationPart.Presentation!.SlideIdList?.Elements<SlideId>().ToList() ?? [];
+            int imageIndex = 0;
+
+            for (int slideIdx = 0; slideIdx < slideIds.Count; slideIdx++)
+            {
+                var slideId = slideIds[slideIdx];
+                if (slideId.RelationshipId?.Value == null) continue;
+
+                var slidePart = (SlidePart)presentationPart.GetPartById(slideId.RelationshipId.Value);
+                var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
+                if (shapeTree == null) continue;
+
+                // Slide text provides context for AI captioning
+                var slideText = ExtractSlideText(slidePart);
+
+                foreach (var picture in shapeTree.Descendants<P.Picture>())
+                {
+                    try
+                    {
+                        var blip = picture.Descendants<A.Blip>().FirstOrDefault();
+                        if (blip?.Embed == null) continue;
+
+                        var imagePart = (ImagePart)slidePart.GetPartById(blip.Embed!);
+
+                        // Alt text from NonVisualDrawingProperties
+                        var nvProps = picture.NonVisualPictureProperties?.NonVisualDrawingProperties;
+                        var altText = nvProps?.Description?.Value ?? nvProps?.Name?.Value ?? string.Empty;
+
+                        // Image bytes as base64
+                        using var imgStream = imagePart.GetStream();
+                        using var ms = new MemoryStream();
+                        imgStream.CopyTo(ms);
+                        var imageBase64 = Convert.ToBase64String(ms.ToArray());
+
+                        // Dimensions from ShapeProperties.Transform2D.Extents
+                        var extents = picture.ShapeProperties?.Transform2D?.Extents;
+                        int? widthPx = extents?.Cx != null ? (int)(extents.Cx.Value * 96.0 / EmusPerInch) : null;
+                        int? heightPx = extents?.Cy != null ? (int)(extents.Cy.Value * 96.0 / EmusPerInch) : null;
+
+                        results.Add(new ImageExtractionResult(
+                            Index: imageIndex++,
+                            MimeType: imagePart.ContentType,
+                            ImageBase64: imageBase64,
+                            AltText: altText,
+                            ContextBefore: slideText,
+                            ContextAfter: string.Empty,
+                            WidthPx: widthPx,
+                            HeightPx: heightPx,
+                            PageOrSlideNumber: slideIdx + 1
+                        ));
+                    }
+                    catch
+                    {
+                        // Skip problematic images
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Return whatever was collected before the error
+        }
+        return results;
+    }
+
     #region Private Helper Methods
 
     private static SlidePart? GetSlidePart(PresentationDocument presentation, int slideIndex)
     {
         var presentationPart = presentation.PresentationPart;
-        var slideIds = presentationPart?.Presentation.SlideIdList?.Elements<SlideId>().ToList() ?? [];
+        var slideIds = presentationPart?.Presentation!.SlideIdList?.Elements<SlideId>().ToList() ?? [];
         
         if (slideIndex < 0 || slideIndex >= slideIds.Count)
             return null;
@@ -905,7 +981,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             var paragraph = new A.Paragraph(
                 new A.ParagraphProperties(
                     new A.BulletFont { Typeface = "Arial" },
-                    new A.CharacterBullet { Char = "•" }
+                    new A.CharacterBullet { Char = "ï¿½" }
                 )
                 { LeftMargin = 228600, Indent = -228600 },
                 CreateTextRun(point, options.TextFormat)
@@ -1096,7 +1172,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static string ExtractSlideText(SlidePart slidePart)
     {
-        var texts = slidePart.Slide.Descendants<A.Text>()
+        var texts = slidePart.Slide!.Descendants<A.Text>()
             .Select(t => t.Text)
             .Where(t => !string.IsNullOrWhiteSpace(t));
         

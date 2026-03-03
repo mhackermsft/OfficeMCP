@@ -166,6 +166,22 @@ public record ContentResult(
     string? Suggestion = null
 );
 
+/// <summary>
+/// A single content item returned by GetRichContent: one of "heading", "paragraph", "image", or "table".
+/// Items are returned in document reading order so that section headings and surrounding paragraphs
+/// provide natural context for any inline images.
+/// </summary>
+public record DocumentContentItem(
+    string Type,          // "heading" | "paragraph" | "image" | "table"
+    string? Text = null,  // Present for heading/paragraph/table
+    int? Level = null,    // Heading level 1-6 (heading only)
+    string? MimeType = null,      // image/* (image only)
+    string? ImageBase64 = null,   // Base64 image bytes (image only)
+    string? AltText = null,       // Alt text stored in document (image only)
+    int? WidthPx = null,
+    int? HeightPx = null
+);
+
 // ============================================
 // Batch Operation Models for AI Optimization
 // ============================================
@@ -335,4 +351,20 @@ public record ExcelCellFormattingInfo(
     bool WrapText,
     bool HasBorder,
     string? BorderStyle
+);
+
+/// <summary>
+/// An image extracted from a document, with alt text, surrounding paragraph context,
+/// and base64-encoded image data for AI vision analysis (OCR, captioning).
+/// </summary>
+public record ImageExtractionResult(
+    int Index,
+    string MimeType,
+    string ImageBase64,
+    string AltText,
+    string ContextBefore,
+    string ContextAfter,
+    int? WidthPx = null,
+    int? HeightPx = null,
+    int? PageOrSlideNumber = null
 );

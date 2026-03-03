@@ -151,7 +151,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             var worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
             worksheetPart.Worksheet = new Worksheet(new SheetData());
 
-            var sheets = workbookPart.Workbook.GetFirstChild<Sheets>();
+            var sheets = workbookPart.Workbook!.GetFirstChild<Sheets>();
             var sheetId = sheets?.Elements<Sheet>().Max(s => s.SheetId?.Value ?? 0) + 1 ?? 1;
 
             var sheet = new Sheet
@@ -185,7 +185,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new DocumentResult(false, "Sheet data not found");
 
@@ -197,7 +197,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 ApplyCellFormatting(spreadsheet, cell, formatting);
             }
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Cell {cellReference} set to '{value}'", filePath);
         }
@@ -224,7 +224,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new DocumentResult(false, "Sheet data not found");
 
@@ -250,7 +250,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             // Auto-expand any tables that overlap with the new data
             ExpandTablesForRange(worksheetPart, startCol, startRow, endCol, endRow);
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Range starting at {startCell} populated with {values.Length} rows", filePath);
         }
@@ -324,16 +324,16 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             tableDefPart.Table = table;
 
             // Add table parts reference to worksheet
-            var tableParts = worksheetPart.Worksheet.Elements<TableParts>().FirstOrDefault();
+            var tableParts = worksheetPart.Worksheet!.Elements<TableParts>().FirstOrDefault();
             if (tableParts == null)
             {
                 tableParts = new TableParts();
-                worksheetPart.Worksheet.Append(tableParts);
+                worksheetPart.Worksheet!.Append(tableParts);
             }
             tableParts.Append(new TablePart { Id = worksheetPart.GetIdOfPart(tableDefPart) });
             tableParts.Count = (uint)tableParts.Elements<TablePart>().Count();
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Table with {data.Length} rows added at {startCell}", filePath);
         }
@@ -364,7 +364,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 drawingsPart = worksheetPart.AddNewPart<DrawingsPart>();
                 drawingsPart.WorksheetDrawing = new Xdr.WorksheetDrawing();
                 
-                worksheetPart.Worksheet.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
+                worksheetPart.Worksheet!.Append(new Drawing { Id = worksheetPart.GetIdOfPart(drawingsPart) });
             }
 
             var imagePart = drawingsPart.AddImagePart(GetImagePartType(imagePath));
@@ -376,7 +376,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             var (col, row) = ParseCellReference(cellReference);
             AddImageToDrawing(drawingsPart, imagePart, col, row, options);
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Image added at cell {cellReference}", filePath);
         }
@@ -397,19 +397,19 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
             var worksheet = worksheetPart.Worksheet;
-            var mergeCells = worksheet.Elements<MergeCells>().FirstOrDefault();
+            var mergeCells = worksheet!.Elements<MergeCells>().FirstOrDefault();
             
             if (mergeCells == null)
             {
                 mergeCells = new MergeCells();
-                worksheet.InsertAfter(mergeCells, worksheet.Elements<SheetData>().First());
+                worksheet.InsertAfter(mergeCells, worksheet!.Elements<SheetData>().First());
             }
 
             var mergeCell = new MergeCell { Reference = $"{startCell}:{endCell}" };
             mergeCells.Append(mergeCell);
             mergeCells.Count = (uint)mergeCells.Elements<MergeCell>().Count();
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Cells {startCell}:{endCell} merged", filePath);
         }
@@ -430,12 +430,12 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
             var worksheet = worksheetPart.Worksheet;
-            var columns = worksheet.Elements<Columns>().FirstOrDefault();
+            var columns = worksheet!.Elements<Columns>().FirstOrDefault();
             
             if (columns == null)
             {
                 columns = new Columns();
-                worksheet.InsertBefore(columns, worksheet.Elements<SheetData>().First());
+                worksheet.InsertBefore(columns, worksheet!.Elements<SheetData>().First());
             }
 
             var column = columns.Elements<Column>().FirstOrDefault(c => 
@@ -457,7 +457,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 });
             }
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Column {columnIndex} width set to {width}", filePath);
         }
@@ -477,7 +477,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             var row = sheetData?.Elements<Row>().FirstOrDefault(r => r.RowIndex?.Value == rowIndex);
             
             if (row == null)
@@ -489,7 +489,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             row.Height = height;
             row.CustomHeight = true;
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Row {rowIndex} height set to {height}", filePath);
         }
@@ -509,7 +509,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new DocumentResult(false, "Sheet data not found");
 
@@ -517,7 +517,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             cell.CellFormula = new CellFormula(formula);
             cell.CellValue = null; // Clear any existing value, formula will calculate
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Formula set in cell {cellReference}", filePath);
         }
@@ -597,14 +597,14 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                         tableColumns.Count = (uint)newColCount;
                     }
 
-                    tableDefPart.Table.Save();
+                    tableDefPart.Table!.Save();
                     tableResized = true;
                 }
             }
 
             if (tableResized)
             {
-                worksheetPart.Worksheet.Save();
+                worksheetPart.Worksheet!.Save();
                 spreadsheet.Save();
                 return new DocumentResult(true, $"Table(s) resized to include range {startCell}:{endCell}", filePath);
             }
@@ -627,7 +627,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new DocumentResult(false, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new DocumentResult(false, "Sheet data not found");
 
@@ -647,7 +647,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                 }
             }
 
-            worksheetPart.Worksheet.Save();
+            worksheetPart.Worksheet!.Save();
             spreadsheet.Save();
             return new DocumentResult(true, $"Formatting applied to range {startCell}:{endCell}", filePath);
         }
@@ -677,7 +677,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new ContentResult(false, null, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             var cell = sheetData?.Descendants<Cell>().FirstOrDefault(c => c.CellReference?.Value == cellReference);
 
             if (cell == null)
@@ -725,7 +725,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new ContentResult(false, null, $"Sheet '{sheetName}' not found");
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new ContentResult(false, null, "Sheet data not found");
 
@@ -810,7 +810,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
         if (worksheetPart == null)
             return new ContentResult(false, null, $"Sheet '{sheetName}' not found");
 
-        var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+        var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
         if (sheetData == null)
             return new ContentResult(false, null, "Sheet data not found");
 
@@ -851,7 +851,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (workbookPart == null)
                 return new ContentResult(false, null, "Workbook part not found - file may not be a valid Excel workbook");
 
-            var sheets = workbookPart.Workbook.GetFirstChild<Sheets>();
+            var sheets = workbookPart.Workbook!.GetFirstChild<Sheets>();
             if (sheets == null)
                 return new ContentResult(false, null, "No sheets found in workbook");
 
@@ -909,7 +909,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (workbookPart == null)
                 return new DocumentResult(false, "Workbook part not found");
 
-            var sheets = workbookPart.Workbook.GetFirstChild<Sheets>();
+            var sheets = workbookPart.Workbook!.GetFirstChild<Sheets>();
             var sheet = sheets?.Elements<Sheet>().FirstOrDefault(s => s.Name?.Value == sheetName);
             
             if (sheet == null)
@@ -942,7 +942,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (workbookPart == null)
                 return new DocumentResult(false, "Workbook part not found");
 
-            var sheets = workbookPart.Workbook.GetFirstChild<Sheets>();
+            var sheets = workbookPart.Workbook!.GetFirstChild<Sheets>();
             var sheet = sheets?.Elements<Sheet>().FirstOrDefault(s => s.Name?.Value == oldName);
             
             if (sheet == null)
@@ -986,7 +986,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             if (worksheetPart == null)
                 return new ExcelRangeFormattingResult(false, $"Sheet '{sheetName}' not found", null, null, null);
 
-            var sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+            var sheetData = worksheetPart.Worksheet!.GetFirstChild<SheetData>();
             if (sheetData == null)
                 return new ExcelRangeFormattingResult(false, "Sheet data not found", null, null, null);
 
@@ -1183,7 +1183,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
     private static WorksheetPart? GetWorksheetPart(SpreadsheetDocument document, string sheetName)
     {
         var workbookPart = document.WorkbookPart;
-        var sheet = workbookPart?.Workbook.GetFirstChild<Sheets>()?.Elements<Sheet>()
+        var sheet = workbookPart?.Workbook!.GetFirstChild<Sheets>()?.Elements<Sheet>()
             .FirstOrDefault(s => s.Name?.Value == sheetName);
         
         if (sheet?.Id?.Value == null) return null;
@@ -1618,7 +1618,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
                     tableColumns.Count = (uint)newColCount;
                 }
 
-                tableDefPart.Table.Save();
+                tableDefPart.Table!.Save();
             }
         }
     }
@@ -1674,7 +1674,7 @@ public sealed partial class ExcelDocumentService : IExcelDocumentService
             new Xdr.ClientData()
         );
 
-        worksheetDrawing.Append(twoCellAnchor);
+        worksheetDrawing!.Append(twoCellAnchor);
     }
 
     #endregion

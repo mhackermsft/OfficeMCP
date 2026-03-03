@@ -60,18 +60,20 @@ public sealed class OfficeDocumentToolsConsolidated(
     }
 
     [McpServerTool(Name = "office_read", Destructive = false, ReadOnly = true),
-     Description("Reads content from any document format. Returns all text by default. For Excel, reads all sheets or specific sheet/cell/range. For PowerPoint, reads all slides or specific slide.")]
+     Description("Reads content from any document format. Returns all text by default. For Word (.docx): set includeImages=true to receive the full document as an ordered content list (headings, paragraphs, tables, and inline images with base64 data) preserving the section context around every image — ideal for AI OCR and captioning. For Excel, reads all sheets or specific sheet/cell/range. For PowerPoint, reads all slides or specific slide.")]
     public string ReadDocument(
-        [Description("Path to document (any supported format)")] 
+        [Description("Path to document (any supported format)")]
         string filePath,
-        [Description("all (default), element/cell/slide, or range. For Excel: allSheets, sheet, cell, range")] 
+        [Description("all (default), element/cell/slide, or range. For Excel: allSheets, sheet, cell, range")]
         string readType = "all",
-        [Description("Element/paragraph/slide index (0-based), or sheet name for Excel")] 
+        [Description("Element/paragraph/slide index (0-based), or sheet name for Excel")]
         string? elementId = null,
-        [Description("Start index/cell (0-based for Word/PPT, cell reference like A1 for Excel)")] 
+        [Description("Start index/cell (0-based for Word/PPT, cell reference like A1 for Excel)")]
         string? startRef = null,
-        [Description("End index/cell (0-based for Word/PPT, cell reference like C10 for Excel)")] 
-        string? endRef = null)
+        [Description("End index/cell (0-based for Word/PPT, cell reference like C10 for Excel)")]
+        string? endRef = null,
+        [Description("Word (.docx) only: when false, suppresses images and returns plain text only. Default is true: returns an ordered content list with headings, paragraphs, tables, and inline images (base64) in reading order so images appear in their section context.")]
+        bool includeImages = true)
     {
         try
         {
@@ -84,6 +86,7 @@ public sealed class OfficeDocumentToolsConsolidated(
             {
                 "xlsx" => ReadExcelDocument(filePath, readType, elementId, startRef, endRef),
                 "pptx" => ReadPowerPointDocument(filePath, readType, elementId),
+                "docx" when includeImages => ReadDocxRichContent(filePath),
                 _ => ReadDocxOrPdfDocument(filePath, format, readType, elementId, startRef, endRef)
             };
         }
@@ -362,10 +365,10 @@ public sealed class OfficeDocumentToolsConsolidated(
 
             return extractType.ToLowerInvariant() switch
             {
-                "text" => ReadDocument(filePath, scope == "element" ? "element" : scope == "range" ? "range" : "all", 
+                "text" => ReadDocument(filePath, scope == "element" ? "element" : scope == "range" ? "range" : "all",
                     startIndex?.ToString(), startIndex?.ToString(), endIndex?.ToString()),
                 "metadata" => GetMetadata(filePath, true),
-                "images" => ErrorResult("Image extraction not yet implemented", "Coming in future release"),
+                "images" => ExtractDocumentImages(filePath, format),
                 "tables" => ErrorResult("Table extraction not yet implemented", "Coming in future release"),
                 _ => ErrorResult($"Unknown extract type: {extractType}", "Supported: text, images, tables, metadata")
             };
@@ -610,6 +613,45 @@ public sealed class OfficeDocumentToolsConsolidated(
         };
 
         return JsonSerializer.Serialize(result with { Format = "pptx" }, JsonOptions);
+    }
+
+    private string ExtractDocumentImages(string filePath, string format)
+    {
+        IList<OfficeMCP.Models.ImageExtractionResult> images = format switch
+        {
+            "pptx" => FormatDetector.GetPowerPointService(serviceProvider).ExtractImages(filePath),
+            _ => FormatDetector.GetService(format, serviceProvider).ExtractImages(filePath)
+        };
+
+        var response = new
+        {
+            Success = true,
+            Format = format,
+            ImageCount = images.Count,
+            Note = images.Count == 0
+                ? "No embedded images found in this document"
+                : "Each image includes base64-encoded data (ImageBase64), alt text, and surrounding text context. " +
+                  "Use the image data for OCR and caption generation.",
+            Images = images
+        };
+        return JsonSerializer.Serialize(response, JsonOptions);
+    }
+
+    private string ReadDocxRichContent(string filePath)
+    {
+        var wordService = (IWordDocumentService)FormatDetector.GetService("docx", serviceProvider);
+        var items = wordService.GetRichContent(filePath);
+        var response = new
+        {
+            Success = true,
+            Format = "docx",
+            ItemCount = items.Count,
+            Note = "Content is in document reading order. Images appear immediately after their containing paragraph. " +
+                   "Preceding headings and paragraphs provide section context. " +
+                   "Use MimeType + ImageBase64 for AI vision analysis, OCR, and caption generation.",
+            Content = items
+        };
+        return JsonSerializer.Serialize(response, JsonOptions);
     }
 
     private string ReadDocxOrPdfDocument(string filePath, string format, string readType, string? elementId, string? startRef, string? endRef)

@@ -2,6 +2,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using OfficeMCP.Models;
+using System.Text;
 using A = DocumentFormat.OpenXml.Drawing;
 using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
 using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
@@ -34,12 +35,12 @@ public sealed class WordDocumentService : IWordDocumentService
 
             if (layout != null)
             {
-                ApplyPageLayout(mainPart.Document.Body!, layout);
+                ApplyPageLayout(mainPart.Document!.Body!, layout);
             }
 
             if (!string.IsNullOrEmpty(title))
             {
-                AddHeadingInternal(mainPart.Document.Body!, title, 1, null);
+                AddHeadingInternal(mainPart.Document!.Body!, title, 1, null);
             }
 
             document.Save();
@@ -56,7 +57,7 @@ public sealed class WordDocumentService : IWordDocumentService
         try
         {
             using var document = WordprocessingDocument.Open(filePath, true);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new DocumentResult(false, "Document body not found");
@@ -88,7 +89,7 @@ public sealed class WordDocumentService : IWordDocumentService
         try
         {
             using var document = WordprocessingDocument.Open(filePath, true);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new DocumentResult(false, "Document body not found");
@@ -111,7 +112,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new DocumentResult(false, "Table data cannot be empty");
 
             using var document = WordprocessingDocument.Open(filePath, true);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new DocumentResult(false, "Document body not found");
@@ -148,7 +149,7 @@ public sealed class WordDocumentService : IWordDocumentService
 
             using var document = WordprocessingDocument.Open(filePath, true);
             var mainPart = document.MainDocumentPart;
-            var body = mainPart?.Document.Body;
+            var body = mainPart?.Document!.Body;
             
             if (body == null || mainPart == null)
                 return new DocumentResult(false, "Document body not found");
@@ -197,8 +198,8 @@ public sealed class WordDocumentService : IWordDocumentService
             var header = CreateHeaderContent(options);
             headerPart.Header = header;
 
-            EnsureSectionProperties(mainPart.Document.Body!);
-            var sectPr = mainPart.Document.Body!.Elements<SectionProperties>().First();
+            EnsureSectionProperties(mainPart.Document!.Body!);
+            var sectPr = mainPart.Document!.Body!.Elements<SectionProperties>().First();
             
             sectPr.RemoveAllChildren<HeaderReference>();
             sectPr.PrependChild(new HeaderReference 
@@ -230,8 +231,8 @@ public sealed class WordDocumentService : IWordDocumentService
             var footer = CreateFooterContent(options);
             footerPart.Footer = footer;
 
-            EnsureSectionProperties(mainPart.Document.Body!);
-            var sectPr = mainPart.Document.Body!.Elements<SectionProperties>().First();
+            EnsureSectionProperties(mainPart.Document!.Body!);
+            var sectPr = mainPart.Document!.Body!.Elements<SectionProperties>().First();
             
             sectPr.RemoveAllChildren<FooterReference>();
             sectPr.PrependChild(new FooterReference 
@@ -254,7 +255,7 @@ public sealed class WordDocumentService : IWordDocumentService
         try
         {
             using var document = WordprocessingDocument.Open(filePath, true);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new DocumentResult(false, "Document body not found");
@@ -302,7 +303,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new ContentResult(false, null, $"File not found: {filePath}");
 
             using var document = WordprocessingDocument.Open(filePath, false);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new ContentResult(false, null, "Document body not found");
@@ -327,7 +328,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new ContentResult(false, null, $"File not found: {filePath}");
 
             using var document = WordprocessingDocument.Open(filePath, false);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new ContentResult(false, null, "Document body not found");
@@ -353,7 +354,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new ContentResult(false, null, $"File not found: {filePath}");
 
             using var document = WordprocessingDocument.Open(filePath, false);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new ContentResult(false, null, "Document body not found");
@@ -379,7 +380,7 @@ public sealed class WordDocumentService : IWordDocumentService
         try
         {
             using var document = WordprocessingDocument.Open(filePath, true);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
             
             if (body == null)
                 return new DocumentResult(false, "Document body not found");
@@ -403,7 +404,7 @@ public sealed class WordDocumentService : IWordDocumentService
 
             using var document = WordprocessingDocument.Open(filePath, true);
             var mainPart = document.MainDocumentPart;
-            var body = mainPart?.Document.Body;
+            var body = mainPart?.Document!.Body;
             
             if (body == null || mainPart == null)
                 return new DocumentResult(false, "Document body not found");
@@ -444,7 +445,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new ContentResult(false, null, $"File not found: {filePath}");
 
             using var document = WordprocessingDocument.Open(filePath, false);
-            var body = document.MainDocumentPart?.Document.Body;
+            var body = document.MainDocumentPart?.Document!.Body;
 
             if (body == null)
                 return new ContentResult(false, null, "Document body not found");
@@ -469,6 +470,188 @@ public sealed class WordDocumentService : IWordDocumentService
         {
             return new ContentResult(false, null, $"Failed to convert document to markdown: {ex.Message}");
         }
+    }
+
+    public IList<DocumentContentItem> GetRichContent(string filePath)
+    {
+        var items = new List<DocumentContentItem>();
+        try
+        {
+            if (!File.Exists(filePath)) return items;
+
+            using var document = WordprocessingDocument.Open(filePath, false);
+            var mainPart = document.MainDocumentPart;
+            if (mainPart == null) return items;
+
+            var body = mainPart.Document!.Body;
+            if (body == null) return items;
+
+            foreach (var element in body.ChildElements)
+            {
+                if (element is Paragraph para)
+                {
+                    // Determine if this paragraph is a heading
+                    var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                    bool isHeading = !string.IsNullOrEmpty(styleId) &&
+                                     styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase);
+                    int headingLevel = 1;
+                    if (isHeading && int.TryParse(styleId!.AsSpan(7), out int lvl))
+                        headingLevel = Math.Clamp(lvl, 1, 9);
+
+                    // Collect inline drawings embedded in this paragraph
+                    var drawings = para.Descendants<Drawing>().ToList();
+
+                    // Paragraph text â€” exclude text that sits inside a Drawing node
+                    var paraText = GetParagraphTextExcludingDrawings(para);
+
+                    if (!string.IsNullOrWhiteSpace(paraText))
+                    {
+                        items.Add(new DocumentContentItem(
+                            Type: isHeading ? "heading" : "paragraph",
+                            Text: paraText.Trim(),
+                            Level: isHeading ? headingLevel : null
+                        ));
+                    }
+
+                    // Emit one image item per inline drawing (after the paragraph text)
+                    foreach (var drawing in drawings)
+                    {
+                        try
+                        {
+                            var blip = drawing.Descendants<A.Blip>().FirstOrDefault();
+                            if (blip?.Embed == null) continue;
+
+                            var imagePart = (ImagePart)mainPart.GetPartById(blip.Embed!);
+
+                            var docPr = drawing.Descendants<DW.DocProperties>().FirstOrDefault();
+                            var altText = docPr?.Description?.Value ?? docPr?.Title?.Value ?? string.Empty;
+
+                            using var imgStream = imagePart.GetStream();
+                            using var ms = new MemoryStream();
+                            imgStream.CopyTo(ms);
+                            var imageBase64 = Convert.ToBase64String(ms.ToArray());
+
+                            var extent = drawing.Descendants<DW.Extent>().FirstOrDefault();
+                            int? widthPx  = extent?.Cx != null ? (int)(extent.Cx.Value * 96.0 / EmusPerInch) : null;
+                            int? heightPx = extent?.Cy != null ? (int)(extent.Cy.Value * 96.0 / EmusPerInch) : null;
+
+                            items.Add(new DocumentContentItem(
+                                Type: "image",
+                                AltText: altText,
+                                MimeType: imagePart.ContentType,
+                                ImageBase64: imageBase64,
+                                WidthPx: widthPx,
+                                HeightPx: heightPx
+                            ));
+                        }
+                        catch
+                        {
+                            // Skip problematic images
+                        }
+                    }
+                }
+                else if (element is Table table)
+                {
+                    var rows = table.Descendants<TableRow>().ToList();
+                    var tableText = string.Join("\n", rows.Select(r =>
+                        string.Join(" | ", r.Descendants<WpTableCell>().Select(c => c.InnerText.Trim()))
+                    ));
+                    if (!string.IsNullOrWhiteSpace(tableText))
+                    {
+                        items.Add(new DocumentContentItem(Type: "table", Text: tableText));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Return whatever was collected before the error
+        }
+        return items;
+    }
+
+    private static string GetParagraphTextExcludingDrawings(Paragraph para)
+    {
+        var sb = new StringBuilder();
+        foreach (var run in para.Descendants<Run>())
+        {
+            // Skip runs that are entirely inside a Drawing element
+            if (run.Ancestors<Drawing>().Any()) continue;
+            sb.Append(run.InnerText);
+        }
+        return sb.ToString();
+    }
+
+    public IList<ImageExtractionResult> ExtractImages(string filePath)
+    {
+        var results = new List<ImageExtractionResult>();
+        try
+        {
+            if (!File.Exists(filePath)) return results;
+
+            using var document = WordprocessingDocument.Open(filePath, false);
+            var mainPart = document.MainDocumentPart;
+            if (mainPart == null) return results;
+
+            var body = mainPart.Document!.Body;
+            if (body == null) return results;
+
+            var allParagraphs = body.Descendants<Paragraph>().ToList();
+            int imageIndex = 0;
+
+            foreach (var drawing in body.Descendants<Drawing>())
+            {
+                try
+                {
+                    var blip = drawing.Descendants<A.Blip>().FirstOrDefault();
+                    if (blip?.Embed == null) continue;
+
+                    var imagePart = (ImagePart)mainPart.GetPartById(blip.Embed!);
+
+                    // Alt text from DocProperties
+                    var docPr = drawing.Descendants<DW.DocProperties>().FirstOrDefault();
+                    var altText = docPr?.Description?.Value ?? docPr?.Title?.Value ?? string.Empty;
+
+                    // Surrounding paragraph text for AI captioning context
+                    var containingParagraph = drawing.Ancestors<Paragraph>().FirstOrDefault();
+                    var paraIndex = containingParagraph != null ? allParagraphs.IndexOf(containingParagraph) : -1;
+                    var contextBefore = paraIndex > 0 ? allParagraphs[paraIndex - 1].InnerText.Trim() : string.Empty;
+                    var contextAfter = paraIndex >= 0 && paraIndex < allParagraphs.Count - 1
+                        ? allParagraphs[paraIndex + 1].InnerText.Trim() : string.Empty;
+
+                    // Image bytes as base64
+                    using var imgStream = imagePart.GetStream();
+                    using var ms = new MemoryStream();
+                    imgStream.CopyTo(ms);
+                    var imageBase64 = Convert.ToBase64String(ms.ToArray());
+
+                    // Dimensions from Extent element (EMUs â†’ pixels @ 96 dpi)
+                    var extent = drawing.Descendants<DW.Extent>().FirstOrDefault();
+                    int? widthPx = extent?.Cx != null ? (int)(extent.Cx.Value * 96.0 / EmusPerInch) : null;
+                    int? heightPx = extent?.Cy != null ? (int)(extent.Cy.Value * 96.0 / EmusPerInch) : null;
+
+                    results.Add(new ImageExtractionResult(
+                        Index: imageIndex++,
+                        MimeType: imagePart.ContentType,
+                        ImageBase64: imageBase64,
+                        AltText: altText,
+                        ContextBefore: contextBefore,
+                        ContextAfter: contextAfter,
+                        WidthPx: widthPx,
+                        HeightPx: heightPx
+                    ));
+                }
+                catch
+                {
+                    // Skip problematic images
+                }
+            }
+        }
+        catch
+        {
+            // Return whatever was collected before the error
+        }
+        return results;
     }
 
     #region Private Helper Methods
@@ -1032,7 +1215,7 @@ public sealed class WordDocumentService : IWordDocumentService
 
             using var document = WordprocessingDocument.Open(filePath, true);
             var mainPart = document.MainDocumentPart;
-            var body = mainPart?.Document.Body;
+            var body = mainPart?.Document!.Body;
             
             if (body == null || mainPart == null)
                 return new DocumentResult(false, "Document body not found");
@@ -1046,7 +1229,7 @@ public sealed class WordDocumentService : IWordDocumentService
             }
 
             var numbering = numberingPart.Numbering;
-            var abstractNumId = numbering.Elements<AbstractNum>().Count() + 1;
+            var abstractNumId = numbering!.Elements<AbstractNum>().Count() + 1;
             var numId = numbering.Elements<NumberingInstance>().Count() + 1;
 
             // Create abstract numbering
@@ -1061,7 +1244,7 @@ public sealed class WordDocumentService : IWordDocumentService
             else
             {
                 level.AppendChild(new NumberingFormat { Val = NumberFormatValues.Bullet });
-                level.AppendChild(new LevelText { Val = "•" });
+                level.AppendChild(new LevelText { Val = "ï¿½" });
             }
             
             level.AppendChild(new StartNumberingValue { Val = 1 });
@@ -1250,7 +1433,7 @@ public sealed class WordDocumentService : IWordDocumentService
         }
 
         var numbering = numberingPart.Numbering;
-        var abstractNumId = numbering.Elements<AbstractNum>().Count() + 1;
+        var abstractNumId = numbering!.Elements<AbstractNum>().Count() + 1;
         var numId = numbering.Elements<NumberingInstance>().Count() + 1;
 
         // Create abstract numbering
@@ -1265,7 +1448,7 @@ public sealed class WordDocumentService : IWordDocumentService
         else
         {
             level.AppendChild(new NumberingFormat { Val = NumberFormatValues.Bullet });
-            level.AppendChild(new LevelText { Val = "•" });
+            level.AppendChild(new LevelText { Val = "ï¿½" });
         }
         
         level.AppendChild(new StartNumberingValue { Val = 1 });

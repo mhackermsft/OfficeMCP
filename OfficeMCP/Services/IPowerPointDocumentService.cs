@@ -23,4 +23,7 @@ public interface IPowerPointDocumentService
     ContentResult GetAllSlidesText(string filePath);
     ContentResult GetSlideCount(string filePath);
     DocumentResult AddSpeakerNotes(string filePath, int slideIndex, string notes);
+
+    // Image extraction (returns base64 image data + context for AI OCR/captioning)
+    IList<ImageExtractionResult> ExtractImages(string filePath);
 }
