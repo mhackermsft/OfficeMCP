@@ -24,7 +24,7 @@ namespace OfficeMCP.Services;
 /// </summary>
 public sealed class PdfDocumentService : IPdfDocumentService
 {
-public DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null)
+public DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null, string? templatePath = null)
 {
     try
     {

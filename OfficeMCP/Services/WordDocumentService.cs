@@ -18,7 +18,7 @@ public sealed class WordDocumentService : IWordDocumentService
     private const int TwipsPerInch = 1440;
     private const int EmusPerInch = 914400;
 
-    public DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null)
+    public DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null, string? templatePath = null)
     {
         try
         {
@@ -28,9 +28,35 @@ public sealed class WordDocumentService : IWordDocumentService
                 Directory.CreateDirectory(directory);
             }
 
-            using var document = WordprocessingDocument.Create(filePath, WordprocessingDocumentType.Document);
+            if (!string.IsNullOrEmpty(templatePath))
+            {
+                if (!File.Exists(templatePath))
+                    return new DocumentResult(false, $"Template not found: {templatePath}");
+
+                // Copy template to preserve all styles, theme, fonts, and numbering definitions
+                File.Copy(templatePath, filePath, overwrite: true);
+
+                // Clear the body content but keep section properties (page layout)
+                using var document = WordprocessingDocument.Open(filePath, true);
+                var body = document.MainDocumentPart?.Document?.Body;
+                if (body != null)
+                {
+                    var sectPr = body.Elements<SectionProperties>().FirstOrDefault();
+                    body.RemoveAllChildren();
+                    if (sectPr != null)
+                        body.AppendChild(sectPr);
+                }
+                if (layout != null)
+                    ApplyPageLayout(document.MainDocumentPart!.Document!.Body!, layout);
+                if (!string.IsNullOrEmpty(title))
+                    AddHeadingInternal(document.MainDocumentPart!.Document!.Body!, title, 1, null);
+                document.Save();
+                return new DocumentResult(true, $"Document created from template at {filePath}", filePath);
+            }
+
+            using var newDocument = WordprocessingDocument.Create(filePath, WordprocessingDocumentType.Document);
             
-            var mainPart = document.AddMainDocumentPart();
+            var mainPart = newDocument.AddMainDocumentPart();
             mainPart.Document = new Document(new Body());
 
             if (layout != null)
@@ -43,7 +69,7 @@ public sealed class WordDocumentService : IWordDocumentService
                 AddHeadingInternal(mainPart.Document!.Body!, title, 1, null);
             }
 
-            document.Save();
+            newDocument.Save();
             return new DocumentResult(true, $"Document created successfully at {filePath}", filePath);
         }
         catch (Exception ex)
@@ -493,10 +519,17 @@ public sealed class WordDocumentService : IWordDocumentService
                     // Determine if this paragraph is a heading
                     var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
                     bool isHeading = !string.IsNullOrEmpty(styleId) &&
-                                     styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase);
+                                     (styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(styleId, "Title", StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(styleId, "Subtitle", StringComparison.OrdinalIgnoreCase));
                     int headingLevel = 1;
-                    if (isHeading && int.TryParse(styleId!.AsSpan(7), out int lvl))
+                    if (!string.IsNullOrEmpty(styleId) && styleId.StartsWith("Heading", StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(styleId.AsSpan(7), out int lvl))
                         headingLevel = Math.Clamp(lvl, 1, 9);
+                    else if (string.Equals(styleId, "Title", StringComparison.OrdinalIgnoreCase))
+                        headingLevel = 1;
+                    else if (string.Equals(styleId, "Subtitle", StringComparison.OrdinalIgnoreCase))
+                        headingLevel = 2;
 
                     // Collect inline drawings embedded in this paragraph
                     var drawings = para.Descendants<Drawing>().ToList();
@@ -509,7 +542,8 @@ public sealed class WordDocumentService : IWordDocumentService
                         items.Add(new DocumentContentItem(
                             Type: isHeading ? "heading" : "paragraph",
                             Text: paraText.Trim(),
-                            Level: isHeading ? headingLevel : null
+                            Level: isHeading ? headingLevel : null,
+                            Style: styleId
                         ));
                     }
 
@@ -683,6 +717,12 @@ public sealed class WordDocumentService : IWordDocumentService
                 return new string('#', level) + " " + text.Trim();
             }
         }
+
+        // Handle Title and Subtitle styles as headings
+        if (string.Equals(styleId, "Title", StringComparison.OrdinalIgnoreCase))
+            return "# " + text.Trim();
+        if (string.Equals(styleId, "Subtitle", StringComparison.OrdinalIgnoreCase))
+            return "## " + text.Trim();
 
         // Check for list items (numbered or bullet)
         var numPr = pPr?.NumberingProperties;
@@ -1244,12 +1284,16 @@ public sealed class WordDocumentService : IWordDocumentService
             else
             {
                 level.AppendChild(new NumberingFormat { Val = NumberFormatValues.Bullet });
-                level.AppendChild(new LevelText { Val = "�" });
+                level.AppendChild(new LevelText { Val = "\u2022" });
             }
             
             level.AppendChild(new StartNumberingValue { Val = 1 });
-            level.AppendChild(new ParagraphProperties(
+            level.AppendChild(new LevelJustification { Val = LevelJustificationValues.Left });
+            level.AppendChild(new PreviousParagraphProperties(
                 new Indentation { Left = "720", Hanging = "360" }
+            ));
+            level.AppendChild(new NumberingSymbolRunProperties(
+                new RunFonts { Ascii = "Arial", HighAnsi = "Arial" }
             ));
             
             abstractNum.AppendChild(level);
@@ -1320,16 +1364,6 @@ public sealed class WordDocumentService : IWordDocumentService
 
     private static Paragraph CreateMarkdownHeading(MarkdownHeading heading)
     {
-        var fontSize = heading.Level switch
-        {
-            1 => 32,
-            2 => 26,
-            3 => 22,
-            4 => 20,
-            5 => 18,
-            _ => 16
-        };
-
         var paragraph = new Paragraph();
         var pPr = new ParagraphProperties(
             new ParagraphStyleId { Val = $"Heading{heading.Level}" },
@@ -1339,22 +1373,7 @@ public sealed class WordDocumentService : IWordDocumentService
 
         foreach (var inline in heading.Inlines)
         {
-            var run = CreateRunFromInline(inline);
-            // Ensure heading text is bold
-            var rPr = run.GetFirstChild<RunProperties>() ?? new RunProperties();
-            if (rPr.Bold == null)
-            {
-                rPr.PrependChild(new Bold());
-            }
-            if (rPr.FontSize == null)
-            {
-                rPr.AppendChild(new FontSize { Val = (fontSize * 2).ToString() });
-            }
-            if (run.GetFirstChild<RunProperties>() == null)
-            {
-                run.PrependChild(rPr);
-            }
-            paragraph.AppendChild(run);
+            paragraph.AppendChild(CreateRunFromInline(inline));
         }
 
         return paragraph;
@@ -1448,12 +1467,16 @@ public sealed class WordDocumentService : IWordDocumentService
         else
         {
             level.AppendChild(new NumberingFormat { Val = NumberFormatValues.Bullet });
-            level.AppendChild(new LevelText { Val = "�" });
+            level.AppendChild(new LevelText { Val = "\u2022" });
         }
         
         level.AppendChild(new StartNumberingValue { Val = 1 });
-        level.AppendChild(new ParagraphProperties(
+        level.AppendChild(new LevelJustification { Val = LevelJustificationValues.Left });
+        level.AppendChild(new PreviousParagraphProperties(
             new Indentation { Left = "720", Hanging = "360" }
+        ));
+        level.AppendChild(new NumberingSymbolRunProperties(
+            new RunFonts { Ascii = "Arial", HighAnsi = "Arial" }
         ));
         
         abstractNum.AppendChild(level);

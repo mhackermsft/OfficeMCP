@@ -175,6 +175,7 @@ public record DocumentContentItem(
     string Type,          // "heading" | "paragraph" | "image" | "table"
     string? Text = null,  // Present for heading/paragraph/table
     int? Level = null,    // Heading level 1-6 (heading only)
+    string? Style = null, // Word paragraph style name (e.g., "Title", "Subtitle", "Heading1", "Normal", "Quote")
     string? MimeType = null,      // image/* (image only)
     string? ImageBase64 = null,   // Base64 image bytes (image only)
     string? AltText = null,       // Alt text stored in document (image only)

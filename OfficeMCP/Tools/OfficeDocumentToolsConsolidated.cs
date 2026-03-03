@@ -27,7 +27,7 @@ public sealed class OfficeDocumentToolsConsolidated(
     #region TIER 1: CORE OPERATIONS (5 tools - always exposed)
 
     [McpServerTool(Name = "office_create", Destructive = false, ReadOnly = false), 
-     Description("Creates a new document in any supported format (.docx, .xlsx, .pptx, .pdf). Format is auto-detected from file extension. For Excel, creates workbook with optional initial data. For PowerPoint, creates presentation with optional title slide.")]
+     Description("Creates a new document in any supported format (.docx, .xlsx, .pptx, .pdf). Format is auto-detected from file extension. For Excel, creates workbook with optional initial data. For PowerPoint, creates presentation with optional title slide. For Word: if you previously read a document with office_read, always pass the TemplatePath from that response to the templatePath parameter here to preserve the original styles, fonts, theme, and formatting.")]
     public string CreateDocument(
         [Description("Full path with extension (e.g., C:/docs/report.docx, data.xlsx, slides.pptx, document.pdf)")] 
         string filePath,
@@ -40,7 +40,9 @@ public sealed class OfficeDocumentToolsConsolidated(
         [Description("Portrait or Landscape (Word/PDF only)")] 
         string orientation = "Portrait",
         [Description("Letter, Legal, A4, or A3 (Word/PDF only)")] 
-        string pageSize = "Letter")
+        string pageSize = "Letter",
+        [Description("Path to an existing .docx file to use as a style template. When provided, the new document inherits all styles, fonts, and theme from the source document, preserving the original formatting of headings, body text, etc.")] 
+        string? templatePath = null)
     {
         try
         {
@@ -50,7 +52,7 @@ public sealed class OfficeDocumentToolsConsolidated(
             {
                 "xlsx" => CreateExcelDocument(filePath, title, markdown),
                 "pptx" => CreatePowerPointDocument(filePath, title),
-                _ => CreateDocxOrPdfDocument(filePath, format, title, markdown, baseImagePath, orientation, pageSize)
+                _ => CreateDocxOrPdfDocument(filePath, format, title, markdown, baseImagePath, orientation, pageSize, templatePath)
             };
         }
         catch (Exception ex)
@@ -60,7 +62,7 @@ public sealed class OfficeDocumentToolsConsolidated(
     }
 
     [McpServerTool(Name = "office_read", Destructive = false, ReadOnly = true),
-     Description("Reads content from any document format. Returns all text by default. For Word (.docx): set includeImages=true to receive the full document as an ordered content list (headings, paragraphs, tables, and inline images with base64 data) preserving the section context around every image — ideal for AI OCR and captioning. For Excel, reads all sheets or specific sheet/cell/range. For PowerPoint, reads all slides or specific slide.")]
+     Description("Reads content from any document format. Returns all text by default. For Word (.docx): returns an ordered content list (headings, paragraphs, tables, inline images) and a TemplatePath field. When recreating or rewriting a Word document, always pass the TemplatePath value to office_create's templatePath parameter to preserve original styles, fonts, and theme. For Excel, reads all sheets or specific sheet/cell/range. For PowerPoint, reads all slides or specific slide.")]
     public string ReadDocument(
         [Description("Path to document (any supported format)")]
         string filePath,
@@ -565,11 +567,11 @@ public sealed class OfficeDocumentToolsConsolidated(
     }
 
     private string CreateDocxOrPdfDocument(string filePath, string format, string? title, string? markdown,
-        string? baseImagePath, string orientation, string pageSize)
+        string? baseImagePath, string orientation, string pageSize, string? templatePath = null)
     {
         var service = FormatDetector.GetService(format, serviceProvider);
         var layout = new PageLayoutOptions(Orientation: orientation, PageSize: pageSize);
-        var result = service.CreateDocument(filePath, title, layout);
+        var result = service.CreateDocument(filePath, title, layout, templatePath);
 
         if (!result.Success)
             return JsonSerializer.Serialize(result with { Format = format }, JsonOptions);
@@ -645,10 +647,13 @@ public sealed class OfficeDocumentToolsConsolidated(
         {
             Success = true,
             Format = "docx",
+            FilePath = filePath,
+            TemplatePath = filePath,
             ItemCount = items.Count,
             Note = "Content is in document reading order. Images appear immediately after their containing paragraph. " +
                    "Preceding headings and paragraphs provide section context. " +
-                   "Use MimeType + ImageBase64 for AI vision analysis, OCR, and caption generation.",
+                   "Use MimeType + ImageBase64 for AI vision analysis, OCR, and caption generation. " +
+                   "IMPORTANT: When recreating or rewriting this document, pass the TemplatePath value to the templatePath parameter of office_create to preserve the original styles, fonts, and formatting.",
             Content = items
         };
         return JsonSerializer.Serialize(response, JsonOptions);

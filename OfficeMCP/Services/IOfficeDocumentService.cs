@@ -9,7 +9,7 @@ namespace OfficeMCP.Services;
 public interface IOfficeDocumentService
 {
     // Core document operations
-    DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null);
+    DocumentResult CreateDocument(string filePath, string? title = null, PageLayoutOptions? layout = null, string? templatePath = null);
     ContentResult GetDocumentText(string filePath);
     DocumentResult AddMarkdownContent(string filePath, string markdown, string? baseImagePath = null);
     
