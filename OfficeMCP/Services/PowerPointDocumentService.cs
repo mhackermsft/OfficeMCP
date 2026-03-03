@@ -16,6 +16,13 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
     private const long EmusPerInch = 914400;
     private const long DefaultSlideWidth = 9144000;
     private const long DefaultSlideHeight = 6858000;
+    private static uint _nextShapeId = 10000;
+
+    /// <summary>
+    /// Thread-safe shape ID generator to avoid duplicate IDs that corrupt PPTX files.
+    /// Using new Random() per call was producing duplicates when shapes were added in quick succession.
+    /// </summary>
+    private static uint NextShapeId() => Interlocked.Increment(ref _nextShapeId);
 
     public DocumentResult CreatePresentation(string filePath, string? title = null)
     {
@@ -300,6 +307,178 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
         catch (Exception ex)
         {
             return new DocumentResult(false, $"Failed to add image: {ex.Message}");
+        }
+    }
+
+    public DocumentResult AddImageFromBase64(string filePath, int slideIndex, string base64Data, string mimeType, long x, long y, ImageOptions? options = null)
+    {
+        try
+        {
+            options ??= new ImageOptions();
+
+            using var presentation = PresentationDocument.Open(filePath, true);
+            var slidePart = GetSlidePart(presentation, slideIndex);
+
+            if (slidePart == null)
+                return new DocumentResult(false, $"Slide {slideIndex} not found");
+
+            var partType = mimeType.ToLowerInvariant() switch
+            {
+                "image/png" or "png" => ImagePartType.Png,
+                "image/jpeg" or "image/jpg" or "jpeg" or "jpg" => ImagePartType.Jpeg,
+                "image/gif" or "gif" => ImagePartType.Gif,
+                "image/bmp" or "bmp" => ImagePartType.Bmp,
+                "image/svg+xml" or "svg" => ImagePartType.Svg,
+                _ => ImagePartType.Png
+            };
+
+            var imagePart = slidePart.AddImagePart(partType);
+            var imageBytes = Convert.FromBase64String(base64Data);
+            using (var ms = new MemoryStream(imageBytes))
+            {
+                imagePart.FeedData(ms);
+            }
+
+            var relationshipId = slidePart.GetIdOfPart(imagePart);
+            var picture = CreatePicture(relationshipId, x, y, options);
+
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
+            shapeTree?.Append(picture);
+
+            slidePart.Slide!.Save();
+            return new DocumentResult(true, "Base64 image added successfully", filePath);
+        }
+        catch (Exception ex)
+        {
+            return new DocumentResult(false, $"Failed to add base64 image: {ex.Message}");
+        }
+    }
+
+    public DocumentResult SetShapeZOrder(string filePath, int slideIndex, int shapeIndex, string position)
+    {
+        try
+        {
+            using var presentation = PresentationDocument.Open(filePath, true);
+            var slidePart = GetSlidePart(presentation, slideIndex);
+
+            if (slidePart == null)
+                return new DocumentResult(false, $"Slide {slideIndex} not found");
+
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
+            if (shapeTree == null)
+                return new DocumentResult(false, "Shape tree not found");
+
+            // Get all child shapes (skip the first two: NonVisualGroupShapeProperties + GroupShapeProperties)
+            var shapes = shapeTree.ChildElements
+                .Where(e => e is P.Shape || e is P.Picture || e is P.GroupShape || e is P.ConnectionShape || e is P.GraphicFrame)
+                .ToList();
+
+            if (shapeIndex < 0 || shapeIndex >= shapes.Count)
+                return new DocumentResult(false, $"Shape index {shapeIndex} out of range (0-{shapes.Count - 1})");
+
+            var shape = shapes[shapeIndex];
+            shape.Remove();
+
+            switch (position.ToLowerInvariant())
+            {
+                case "front" or "top":
+                    shapeTree.Append(shape);
+                    break;
+                case "back" or "bottom":
+                    var firstShape = shapeTree.ChildElements
+                        .FirstOrDefault(e => e is P.Shape || e is P.Picture || e is P.GroupShape || e is P.ConnectionShape || e is P.GraphicFrame);
+                    if (firstShape != null)
+                        shapeTree.InsertBefore(shape, firstShape);
+                    else
+                        shapeTree.Append(shape);
+                    break;
+                case "forward":
+                    if (shapeIndex < shapes.Count - 1)
+                    {
+                        var nextShape = shapes[shapeIndex + 1];
+                        shapeTree.InsertAfter(shape, nextShape);
+                    }
+                    else
+                    {
+                        shapeTree.Append(shape);
+                    }
+                    break;
+                case "backward":
+                    if (shapeIndex > 0)
+                    {
+                        var prevShape = shapes[shapeIndex - 1];
+                        shapeTree.InsertBefore(shape, prevShape);
+                    }
+                    else
+                    {
+                        var first = shapeTree.ChildElements
+                            .FirstOrDefault(e => e is P.Shape || e is P.Picture || e is P.GroupShape || e is P.ConnectionShape || e is P.GraphicFrame);
+                        if (first != null)
+                            shapeTree.InsertBefore(shape, first);
+                        else
+                            shapeTree.Append(shape);
+                    }
+                    break;
+                default:
+                    shapeTree.Append(shape);
+                    return new DocumentResult(false, $"Unknown position: {position}", Suggestion: "Use: front, back, forward, backward");
+            }
+
+            slidePart.Slide!.Save();
+            return new DocumentResult(true, $"Shape {shapeIndex} moved to {position}", filePath);
+        }
+        catch (Exception ex)
+        {
+            return new DocumentResult(false, $"Failed to set z-order: {ex.Message}");
+        }
+    }
+
+    public DocumentResult ReorderShape(string filePath, int slideIndex, int fromIndex, int toIndex)
+    {
+        try
+        {
+            using var presentation = PresentationDocument.Open(filePath, true);
+            var slidePart = GetSlidePart(presentation, slideIndex);
+
+            if (slidePart == null)
+                return new DocumentResult(false, $"Slide {slideIndex} not found");
+
+            var shapeTree = slidePart.Slide!.CommonSlideData?.ShapeTree;
+            if (shapeTree == null)
+                return new DocumentResult(false, "Shape tree not found");
+
+            var shapes = shapeTree.ChildElements
+                .Where(e => e is P.Shape || e is P.Picture || e is P.GroupShape || e is P.ConnectionShape || e is P.GraphicFrame)
+                .ToList();
+
+            if (fromIndex < 0 || fromIndex >= shapes.Count)
+                return new DocumentResult(false, $"From index {fromIndex} out of range (0-{shapes.Count - 1})");
+            if (toIndex < 0 || toIndex >= shapes.Count)
+                return new DocumentResult(false, $"To index {toIndex} out of range (0-{shapes.Count - 1})");
+
+            var shape = shapes[fromIndex];
+            shape.Remove();
+
+            // Re-fetch after removal
+            var remainingShapes = shapeTree.ChildElements
+                .Where(e => e is P.Shape || e is P.Picture || e is P.GroupShape || e is P.ConnectionShape || e is P.GraphicFrame)
+                .ToList();
+
+            if (toIndex >= remainingShapes.Count)
+            {
+                shapeTree.Append(shape);
+            }
+            else
+            {
+                shapeTree.InsertBefore(shape, remainingShapes[toIndex]);
+            }
+
+            slidePart.Slide!.Save();
+            return new DocumentResult(true, $"Shape moved from position {fromIndex} to {toIndex}", filePath);
+        }
+        catch (Exception ex)
+        {
+            return new DocumentResult(false, $"Failed to reorder shape: {ex.Message}");
         }
     }
 
@@ -1070,7 +1249,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
         bool wordWrap = true, string autoFit = "None", double rotation = 0.0,
         GradientFillOptions? gradientFill = null)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
 
         var bodyProperties = new A.BodyProperties
         {
@@ -1187,7 +1366,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.Shape CreateBulletShape(string[] points, TextBoxOptions options)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
         
         var textBody = new P.TextBody(
             new A.BodyProperties(),
@@ -1199,7 +1378,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             var paragraph = new A.Paragraph(
                 new A.ParagraphProperties(
                     new A.BulletFont { Typeface = "Arial" },
-                    new A.CharacterBullet { Char = "�" }
+                    new A.CharacterBullet { Char = "\u2022" }
                 )
                 { LeftMargin = 228600, Indent = -228600 },
                 CreateTextRun(point, options.TextFormat)
@@ -1227,7 +1406,43 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.Picture CreatePicture(string relationshipId, long x, long y, ImageOptions options)
     {
-        var pictureId = (uint)new Random().Next(10000, 99999);
+        var pictureId = NextShapeId();
+
+        // Determine crop shape (default Rectangle, use Ellipse for circular avatars)
+        var cropShapeType = MapShapeType(options.CropShape ?? "Rectangle");
+
+        var transform = new A.Transform2D(
+            new A.Offset { X = x, Y = y },
+            new A.Extents { Cx = options.WidthEmu, Cy = options.HeightEmu }
+        );
+        if (options.Rotation != 0.0)
+            transform.Rotation = (int)(options.Rotation * 60000);
+
+        var shapeProperties = new P.ShapeProperties(
+            transform,
+            new A.PresetGeometry(new A.AdjustValueList()) { Preset = cropShapeType }
+        );
+
+        // Border/outline
+        if (!string.IsNullOrEmpty(options.BorderColor) && options.BorderWidth > 0)
+        {
+            shapeProperties.Append(new A.Outline(
+                new A.SolidFill(new A.RgbColorModelHex { Val = options.BorderColor.TrimStart('#') })
+            )
+            { Width = (int)(options.BorderWidth * 12700) });
+        }
+
+        // Shadow
+        if (options.HasShadow)
+        {
+            shapeProperties.Append(CreateShadowEffect());
+        }
+
+        // 3D perspective
+        if (options.Perspective3DAngleX != 0.0 || options.Perspective3DAngleY != 0.0)
+        {
+            shapeProperties.Append(Create3DScene(options.Perspective3DAngleX, options.Perspective3DAngleY));
+        }
 
         return new P.Picture(
             new P.NonVisualPictureProperties(
@@ -1239,19 +1454,13 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 new A.Blip { Embed = relationshipId },
                 new A.Stretch(new A.FillRectangle())
             ),
-            new P.ShapeProperties(
-                new A.Transform2D(
-                    new A.Offset { X = x, Y = y },
-                    new A.Extents { Cx = options.WidthEmu, Cy = options.HeightEmu }
-                ),
-                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }
-            )
+            shapeProperties
         );
     }
 
     private static P.Shape CreateShape(ShapeOptions options)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
 
         var shapeType = MapShapeType(options.ShapeType);
 
@@ -1309,6 +1518,12 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             shapeProperties.Append(CreateShadowEffect());
         }
 
+        // 3D perspective
+        if (options.Perspective3DAngleX != 0.0 || options.Perspective3DAngleY != 0.0)
+        {
+            shapeProperties.Append(Create3DScene(options.Perspective3DAngleX, options.Perspective3DAngleY));
+        }
+
         var shape = new P.Shape(
             new P.NonVisualShapeProperties(
                 new P.NonVisualDrawingProperties { Id = shapeId, Name = $"Shape {shapeId}" },
@@ -1351,7 +1566,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.ConnectionShape CreateConnectorShape(ConnectorOptions options)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
 
         // Compute position and extents from endpoints
         var x = Math.Min(options.X1, options.X2);
@@ -1406,7 +1621,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.Shape CreateLineShape(LineOptions options)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
 
         var x = Math.Min(options.X1, options.X2);
         var y = Math.Min(options.Y1, options.Y2);
@@ -1454,7 +1669,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.GroupShape CreateGroupShape(long x, long y, long width, long height, GroupShapeItem[] items, SlidePart slidePart)
     {
-        var groupId = (uint)new Random().Next(10000, 99999);
+        var groupId = NextShapeId();
 
         var groupShape = new P.GroupShape(
             new P.NonVisualGroupShapeProperties(
@@ -1522,7 +1737,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.Shape CreateRichTextShape(TextBoxOptions options)
     {
-        var shapeId = (uint)new Random().Next(10000, 99999);
+        var shapeId = NextShapeId();
 
         var transform = new A.Transform2D(
             new A.Offset { X = options.X, Y = options.Y },
@@ -1678,6 +1893,35 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
                 Direction = 2700000,
                 Alignment = A.RectangleAlignmentValues.TopLeft,
                 RotateWithShape = false
+            }
+        );
+    }
+
+    /// <summary>
+    /// Creates a 3D scene with perspective camera rotation for shapes/images.
+    /// This enables the stacked card perspective effect seen in modern slide designs.
+    /// OpenXML represents 3D rotation via a:scene3d with camera rotation angles.
+    /// </summary>
+    private static A.Scene3DType Create3DScene(double rotationX, double rotationY)
+    {
+        // OpenXML uses 60000ths of a degree for rotation values
+        var rotXVal = (int)(rotationX * 60000);
+        var rotYVal = (int)(rotationY * 60000);
+
+        return new A.Scene3DType(
+            new A.Camera(
+                new A.Rotation
+                {
+                    Latitude = rotXVal,
+                    Longitude = rotYVal,
+                    Revolution = 0
+                }
+            )
+            { Preset = A.PresetCameraValues.PerspectiveFront },
+            new A.LightRig
+            {
+                Rig = A.LightRigValues.ThreePoints,
+                Direction = A.LightRigDirectionValues.Top
             }
         );
     }
@@ -1849,7 +2093,7 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
 
     private static P.GraphicFrame CreateTableGraphicFrame(string[][] data, long x, long y, long width, long height)
     {
-        var frameId = (uint)new Random().Next(10000, 99999);
+        var frameId = NextShapeId();
         var rows = data.Length;
         var cols = data.Max(r => r.Length);
         var colWidth = width / cols;

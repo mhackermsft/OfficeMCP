@@ -58,7 +58,39 @@ public record ImageOptions(
     long WidthEmu = 914400,
     long HeightEmu = 914400,
     string? AltText = null,
-    string Positioning = "Inline"
+    string Positioning = "Inline",
+    /// <summary>
+    /// Shape to crop/clip the image into: Rectangle (default), Ellipse, RoundRectangle, Triangle, etc.
+    /// Use "Ellipse" for circular avatar photos.
+    /// </summary>
+    string CropShape = "Rectangle",
+    /// <summary>
+    /// Rotation in degrees (0-360).
+    /// </summary>
+    double Rotation = 0.0,
+    /// <summary>
+    /// Border/outline color as hex (e.g., "4472C4"). No border if null.
+    /// </summary>
+    string? BorderColor = null,
+    /// <summary>
+    /// Border width in points.
+    /// </summary>
+    double BorderWidth = 0.0,
+    /// <summary>
+    /// Add drop shadow effect.
+    /// </summary>
+    bool HasShadow = false,
+    /// <summary>
+    /// 3D rotation angle around the Y axis in degrees (perspective tilt).
+    /// Positive = rotate right edge away, negative = rotate left edge away.
+    /// Use 15-30 degrees for subtle perspective card effects.
+    /// </summary>
+    double Perspective3DAngleY = 0.0,
+    /// <summary>
+    /// 3D rotation angle around the X axis in degrees (perspective tilt).
+    /// Positive = rotate top edge away, negative = rotate bottom edge away.
+    /// </summary>
+    double Perspective3DAngleX = 0.0
 );
 
 /// <summary>
@@ -259,7 +291,15 @@ public record ShapeOptions(
     double MarginRightInches = 0.1,
     double MarginTopInches = 0.05,
     double MarginBottomInches = 0.05,
-    bool NoFill = false
+    bool NoFill = false,
+    /// <summary>
+    /// 3D rotation angle around the Y axis in degrees (perspective tilt).
+    /// </summary>
+    double Perspective3DAngleY = 0.0,
+    /// <summary>
+    /// 3D rotation angle around the X axis in degrees (perspective tilt).
+    /// </summary>
+    double Perspective3DAngleX = 0.0
 );
 
 /// <summary>
@@ -439,7 +479,17 @@ public record PowerPointOperation(
     double? MarginTopInches = null,
     double? MarginBottomInches = null,
     // Slide size
-    string? SlideSize = null
+    string? SlideSize = null,
+    // Image crop shape (Ellipse for circular avatars)
+    string? CropShape = null,
+    // 3D perspective rotation
+    double? Perspective3DAngleY = null,
+    double? Perspective3DAngleX = null,
+    // Base64 image data (alternative to ImagePath)
+    string? ImageBase64 = null,
+    string? ImageMimeType = null,
+    // Z-order placement
+    int? ZOrderPosition = null
 );
 
 /// <summary>

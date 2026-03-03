@@ -7,18 +7,17 @@ using System.Text.Json;
 namespace OfficeMCP.Tools;
 
 /// <summary>
-/// LEGACY: Format-specific PowerPoint tools - kept for backward compatibility.
-/// Use the unified office_* tools from OfficeDocumentToolsConsolidated instead.
-/// This class is no longer registered as an MCP tool provider.
+/// PowerPoint-specific tools with full positioning, styling, and shape control.
+/// Provides pptx_* tools for precise slide creation capabilities.
 /// </summary>
-// [McpServerToolType] - Disabled: Use consolidated office_* tools instead
+[McpServerToolType]
 public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService powerPointService)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     #region Core Presentation Operations
 
-    // [McpServerTool] - Disabled: Use office_create instead
+    [McpServerTool(Name = "pptx_create", Destructive = false, ReadOnly = false), Description("Creates a new PowerPoint presentation with optional title and subtitle.")]
     public string CreatePowerPointPresentation(
         [Description("Full path (e.g., C:/slides/demo.pptx)")] string filePath,
         [Description("Title for first slide")] string? title = null,
@@ -208,7 +207,7 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         return JsonSerializer.Serialize(powerPointService.AddTextBox(filePath, slideIndex, text ?? string.Empty, options), JsonOptions);
     }
 
-    [McpServerTool(Name = "pptx_add_image", Destructive = false, ReadOnly = false), Description("Adds an image to a slide. Supports JPEG, PNG, GIF, BMP.")]
+    [McpServerTool(Name = "pptx_add_image", Destructive = false, ReadOnly = false), Description("Adds an image to a slide. Supports JPEG, PNG, GIF, BMP. Can crop to shapes (Ellipse for circular avatars), add borders, shadows, rotation, and 3D perspective.")]
     public string AddPowerPointImage(
         [Description("Path to the presentation")] string filePath,
         [Description("Slide index (0-based)")] int slideIndex,
@@ -217,7 +216,14 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         [Description("Y position in inches")] double yInches = 2.0,
         [Description("Width in inches")] double widthInches = 4.0,
         [Description("Height in inches")] double heightInches = 3.0,
-        [Description("Alt text for accessibility")] string? altText = null)
+        [Description("Alt text for accessibility")] string? altText = null,
+        [Description("Crop shape: Rectangle (default), Ellipse (circular avatar), RoundRectangle, Triangle, etc.")] string cropShape = "Rectangle",
+        [Description("Rotation in degrees")] double rotation = 0.0,
+        [Description("Border color as hex (e.g., CCCCCC)")] string? borderColor = null,
+        [Description("Border width in points")] double borderWidth = 0.0,
+        [Description("Add drop shadow")] bool hasShadow = false,
+        [Description("3D Y-axis rotation in degrees (perspective tilt, 15-30 for card effect)")] double perspective3DAngleY = 0.0,
+        [Description("3D X-axis rotation in degrees")] double perspective3DAngleX = 0.0)
     {
         if (!File.Exists(filePath))
             return JsonSerializer.Serialize(new DocumentResult(false, $"Presentation not found: {filePath}", Suggestion: "Use pptx_create to create the presentation first"), JsonOptions);
@@ -228,7 +234,14 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         var options = new ImageOptions(
             WidthEmu: (long)(widthInches * 914400),
             HeightEmu: (long)(heightInches * 914400),
-            AltText: altText
+            AltText: altText,
+            CropShape: cropShape,
+            Rotation: rotation,
+            BorderColor: borderColor,
+            BorderWidth: borderWidth,
+            HasShadow: hasShadow,
+            Perspective3DAngleY: perspective3DAngleY,
+            Perspective3DAngleX: perspective3DAngleX
         );
         var result = powerPointService.AddImage(filePath, slideIndex, imagePath, (long)(xInches * 914400), (long)(yInches * 914400), options);
         return JsonSerializer.Serialize(result, JsonOptions);
@@ -290,7 +303,9 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         [Description("Fill transparency 0-100")] int transparencyPercent = 0,
         [Description("Gradient fill JSON: {\"stops\":[{\"position\":0,\"color\":\"FF0000\"},{\"position\":100,\"color\":\"0000FF\"}],\"angle\":90}")] string? gradientJson = null,
         [Description("Rich text paragraphs JSON (overrides text param)")] string? paragraphsJson = null,
-        [Description("No fill (transparent shape)")] bool noFill = false)
+        [Description("No fill (transparent shape)")] bool noFill = false,
+        [Description("3D Y-axis rotation in degrees (perspective tilt, 15-30 for card effect)")] double perspective3DAngleY = 0.0,
+        [Description("3D X-axis rotation in degrees")] double perspective3DAngleX = 0.0)
     {
         GradientFillOptions? gradient = null;
         if (!string.IsNullOrWhiteSpace(gradientJson))
@@ -327,7 +342,9 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             TransparencyPercent: transparencyPercent,
             GradientFill: gradient,
             Paragraphs: paragraphs,
-            NoFill: noFill
+            NoFill: noFill,
+            Perspective3DAngleY: perspective3DAngleY,
+            Perspective3DAngleX: perspective3DAngleX
         );
         var result = powerPointService.AddShape(filePath, slideIndex, options);
         return JsonSerializer.Serialize(result, JsonOptions);
@@ -390,6 +407,69 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             EndArrow: endArrow
         );
         var result = powerPointService.AddConnector(filePath, slideIndex, options);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_add_image_base64", Destructive = false, ReadOnly = false), Description("Adds an image from base64-encoded data to a slide. Useful for inline icons, generated images, or images fetched from URLs without saving to disk first.")]
+    public string AddPowerPointImageFromBase64(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Base64-encoded image data")] string base64Data,
+        [Description("Image MIME type: png, jpeg, gif, bmp, svg")] string mimeType = "png",
+        [Description("X position in inches")] double xInches = 1.0,
+        [Description("Y position in inches")] double yInches = 2.0,
+        [Description("Width in inches")] double widthInches = 2.0,
+        [Description("Height in inches")] double heightInches = 2.0,
+        [Description("Alt text for accessibility")] string? altText = null,
+        [Description("Crop shape: Rectangle, Ellipse (circular), RoundRectangle, etc.")] string cropShape = "Rectangle",
+        [Description("Rotation in degrees")] double rotation = 0.0,
+        [Description("Border color as hex")] string? borderColor = null,
+        [Description("Border width in points")] double borderWidth = 0.0,
+        [Description("Add drop shadow")] bool hasShadow = false)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new DocumentResult(false, $"Presentation not found: {filePath}"), JsonOptions);
+
+        var options = new ImageOptions(
+            WidthEmu: (long)(widthInches * 914400),
+            HeightEmu: (long)(heightInches * 914400),
+            AltText: altText,
+            CropShape: cropShape,
+            Rotation: rotation,
+            BorderColor: borderColor,
+            BorderWidth: borderWidth,
+            HasShadow: hasShadow
+        );
+        var result = powerPointService.AddImageFromBase64(filePath, slideIndex, base64Data, mimeType,
+            (long)(xInches * 914400), (long)(yInches * 914400), options);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_z_order", Destructive = false, ReadOnly = false), Description("Changes the z-order (front-to-back stacking) of a shape on a slide. Shapes at the front cover shapes behind them.")]
+    public string SetPowerPointZOrder(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Shape index (0-based, order shapes were added)")] int shapeIndex,
+        [Description("Position: front (on top of everything), back (behind everything), forward (one step up), backward (one step down)")] string position)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new DocumentResult(false, $"Presentation not found: {filePath}"), JsonOptions);
+
+        var result = powerPointService.SetShapeZOrder(filePath, slideIndex, shapeIndex, position);
+        return JsonSerializer.Serialize(result, JsonOptions);
+    }
+
+    [McpServerTool(Name = "pptx_reorder_shape", Destructive = false, ReadOnly = false), Description("Moves a shape from one z-order position to another. Lower index = further back, higher index = more in front.")]
+    public string ReorderPowerPointShape(
+        [Description("Path to the presentation")] string filePath,
+        [Description("Slide index (0-based)")] int slideIndex,
+        [Description("Current shape index (0-based)")] int fromIndex,
+        [Description("Target shape index (0-based)")] int toIndex)
+    {
+        if (!File.Exists(filePath))
+            return JsonSerializer.Serialize(new DocumentResult(false, $"Presentation not found: {filePath}"), JsonOptions);
+
+        var result = powerPointService.ReorderShape(filePath, slideIndex, fromIndex, toIndex);
         return JsonSerializer.Serialize(result, JsonOptions);
     }
 
@@ -478,7 +558,7 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
 
     #region Batch Operations
 
-    [McpServerTool(Name = "pptx_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations on a presentation in a single call. Types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes.")]
+    [McpServerTool(Name = "pptx_batch", Destructive = true, ReadOnly = false), Description("Performs multiple operations on a presentation in a single call. Types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addImageBase64, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes, setZOrder, reorderShape. Images support cropShape (Ellipse for circular avatars) and perspective3DAngleY/X for 3D effects.")]
     public string BatchModifyPowerPointPresentation(
         [Description("Path to the presentation")] string filePath,
         [Description("JSON array of operations, e.g.: [{\"type\":\"addSlide\"}, {\"type\":\"addShape\",\"slideIndex\":0,\"shapeType\":\"roundRectangle\",\"xInches\":1,\"yInches\":1,\"widthInches\":3,\"heightInches\":1,\"fillColor\":\"4472C4\",\"text\":\"Hello\",\"fontColor\":\"FFFFFF\",\"bold\":true}]")] string operationsJson)
@@ -514,13 +594,16 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
                         "addrichtextbox" => ProcessAddRichTextBox(filePath, op),
                         "addbulletpoints" => ProcessAddBulletPoints(filePath, op),
                         "addimage" => ProcessAddImage(filePath, op),
+                        "addimagebase64" => ProcessAddImage(filePath, op),
                         "addshape" => ProcessAddShape(filePath, op),
                         "addline" => ProcessAddLine(filePath, op),
                         "addconnector" => ProcessAddConnector(filePath, op),
                         "addgroupshape" => ProcessAddGroupShape(filePath, op),
                         "addtable" => ProcessAddTable(filePath, op),
                         "addspeakernotes" => ProcessAddSpeakerNotes(filePath, op),
-                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes")
+                        "setzorder" => ProcessSetZOrder(filePath, op),
+                        "reordershape" => ProcessReorderShape(filePath, op),
+                        _ => new DocumentResult(false, $"Unknown type: '{op.Type}'", Suggestion: "Valid types: addSlide, deleteSlide, duplicateSlide, reorderSlide, setBackground, setBackgroundGradient, setSlideSize, addTitle, addTextBox, addRichTextBox, addBulletPoints, addImage, addImageBase64, addShape, addLine, addConnector, addGroupShape, addTable, addSpeakerNotes, setZOrder, reorderShape")
                     };
 
                     if (opResult.Success)
@@ -698,15 +781,37 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
 
     private DocumentResult ProcessAddImage(string filePath, PowerPointOperation op)
     {
-        if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.ImagePath))
-            return new DocumentResult(false, "Slide index and image path are required");
-        var options = new ImageOptions(
+        if (!op.SlideIndex.HasValue)
+            return new DocumentResult(false, "Slide index is required");
+
+        // Support base64 image data as alternative to file path
+        if (!string.IsNullOrWhiteSpace(op.ImageBase64))
+        {
+            var options = new ImageOptions(
+                WidthEmu: (long)((op.WidthInches ?? 4.0) * 914400),
+                HeightEmu: (long)((op.HeightInches ?? 3.0) * 914400),
+                AltText: op.AltText,
+                CropShape: op.CropShape ?? "Rectangle",
+                Perspective3DAngleY: op.Perspective3DAngleY ?? 0.0,
+                Perspective3DAngleX: op.Perspective3DAngleX ?? 0.0
+            );
+            return powerPointService.AddImageFromBase64(filePath, op.SlideIndex.Value, op.ImageBase64, op.ImageMimeType ?? "png",
+                (long)((op.XInches ?? 1.0) * 914400), (long)((op.YInches ?? 2.0) * 914400), options);
+        }
+
+        if (string.IsNullOrWhiteSpace(op.ImagePath))
+            return new DocumentResult(false, "Image path or imageBase64 is required");
+
+        var imgOptions = new ImageOptions(
             WidthEmu: (long)((op.WidthInches ?? 4.0) * 914400),
             HeightEmu: (long)((op.HeightInches ?? 3.0) * 914400),
-            AltText: op.AltText
+            AltText: op.AltText,
+            CropShape: op.CropShape ?? "Rectangle",
+            Perspective3DAngleY: op.Perspective3DAngleY ?? 0.0,
+            Perspective3DAngleX: op.Perspective3DAngleX ?? 0.0
         );
         return powerPointService.AddImage(filePath, op.SlideIndex.Value, op.ImagePath,
-            (long)((op.XInches ?? 1.0) * 914400), (long)((op.YInches ?? 2.0) * 914400), options);
+            (long)((op.XInches ?? 1.0) * 914400), (long)((op.YInches ?? 2.0) * 914400), imgOptions);
     }
 
     private DocumentResult ProcessAddShape(string filePath, PowerPointOperation op)
@@ -749,7 +854,9 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
             MarginLeftInches: op.MarginLeftInches ?? 0.1,
             MarginRightInches: op.MarginRightInches ?? 0.1,
             MarginTopInches: op.MarginTopInches ?? 0.05,
-            MarginBottomInches: op.MarginBottomInches ?? 0.05
+            MarginBottomInches: op.MarginBottomInches ?? 0.05,
+            Perspective3DAngleY: op.Perspective3DAngleY ?? 0.0,
+            Perspective3DAngleX: op.Perspective3DAngleX ?? 0.0
         );
         return powerPointService.AddShape(filePath, op.SlideIndex.Value, options);
     }
@@ -856,6 +963,21 @@ public sealed class PowerPointDocumentToolsOptimized(IPowerPointDocumentService 
         if (!op.SlideIndex.HasValue || string.IsNullOrWhiteSpace(op.Notes))
             return new DocumentResult(false, "Slide index and notes are required");
         return powerPointService.AddSpeakerNotes(filePath, op.SlideIndex.Value, op.Notes);
+    }
+
+    private DocumentResult ProcessSetZOrder(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue || !op.FromIndex.HasValue)
+            return new DocumentResult(false, "Slide index and fromIndex (shape index) are required");
+        var position = op.VerticalAlignment ?? "front";  // Reuse field for position: front, back, forward, backward
+        return powerPointService.SetShapeZOrder(filePath, op.SlideIndex.Value, op.FromIndex.Value, position);
+    }
+
+    private DocumentResult ProcessReorderShape(string filePath, PowerPointOperation op)
+    {
+        if (!op.SlideIndex.HasValue || !op.FromIndex.HasValue || !op.ToIndex.HasValue)
+            return new DocumentResult(false, "Slide index, fromIndex and toIndex are required");
+        return powerPointService.ReorderShape(filePath, op.SlideIndex.Value, op.FromIndex.Value, op.ToIndex.Value);
     }
 
     #endregion

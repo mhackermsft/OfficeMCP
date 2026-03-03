@@ -31,8 +31,13 @@ public interface IPowerPointDocumentService
 
     // Media operations
     DocumentResult AddImage(string filePath, int slideIndex, string imagePath, long x, long y, ImageOptions? options = null);
+    DocumentResult AddImageFromBase64(string filePath, int slideIndex, string base64Data, string mimeType, long x, long y, ImageOptions? options = null);
     DocumentResult AddTable(string filePath, int slideIndex, string[][] data, long x, long y, long width, long height);
     DocumentResult AddSpeakerNotes(string filePath, int slideIndex, string notes);
+
+    // Z-order operations
+    DocumentResult SetShapeZOrder(string filePath, int slideIndex, int shapeIndex, string position);
+    DocumentResult ReorderShape(string filePath, int slideIndex, int fromIndex, int toIndex);
 
     // Read operations
     ContentResult GetSlideText(string filePath, int slideIndex);

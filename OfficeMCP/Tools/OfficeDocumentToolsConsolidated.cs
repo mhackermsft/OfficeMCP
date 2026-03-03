@@ -99,7 +99,7 @@ public sealed class OfficeDocumentToolsConsolidated(
     }
 
     [McpServerTool(Name = "office_write", Destructive = false, ReadOnly = false),
-     Description("Writes or appends content to a document. For Word/PDF: accepts markdown. For Excel: sets cell values. For PowerPoint: adds text to slides.")]
+     Description("Writes or appends content to a document. For Word/PDF: accepts markdown. For Excel: sets cell values. For PowerPoint: adds text to slides with optional positioning and formatting. For full PowerPoint control (shapes, lines, rich text, backgrounds), use the pptx_* tools directly.")]
     public string WriteDocument(
         [Description("Path to document")] 
         string filePath,
@@ -110,7 +110,21 @@ public sealed class OfficeDocumentToolsConsolidated(
         [Description("For Excel: cell reference (e.g., A1). For PowerPoint: X position in inches")] 
         string? position = null,
         [Description("Base path for relative image paths in markdown")] 
-        string? baseImagePath = null)
+        string? baseImagePath = null,
+        [Description("PowerPoint: Y position in inches (default 2.0)")] 
+        double yInches = 2.0,
+        [Description("PowerPoint: width in inches (default 8.0)")] 
+        double widthInches = 8.0,
+        [Description("PowerPoint: height in inches (default 1.0)")] 
+        double heightInches = 1.0,
+        [Description("PowerPoint: font size in points")] 
+        int? fontSize = null,
+        [Description("PowerPoint: font color as hex (e.g., 003366)")] 
+        string? fontColor = null,
+        [Description("PowerPoint: bold text")] 
+        bool bold = false,
+        [Description("PowerPoint: font name (e.g., Calibri, Segoe UI)")] 
+        string? fontName = null)
     {
         try
         {
@@ -125,7 +139,7 @@ public sealed class OfficeDocumentToolsConsolidated(
             return format switch
             {
                 "xlsx" => WriteExcelDocument(filePath, content, targetId, position),
-                "pptx" => WritePowerPointDocument(filePath, content, targetId, position),
+                "pptx" => WritePowerPointDocument(filePath, content, targetId, position, yInches, widthInches, heightInches, fontSize, fontColor, bold, fontName),
                 _ => WriteDocxOrPdfDocument(filePath, format, content, baseImagePath)
             };
         }
@@ -250,11 +264,11 @@ public sealed class OfficeDocumentToolsConsolidated(
     #region TIER 2: COMMON OPERATIONS (5 tools - shown when appropriate)
 
     [McpServerTool(Name = "office_add_element", Destructive = false, ReadOnly = false),
-     Description("Adds content elements to a document. Supports: paragraph, heading, image, table, pageBreak, bulletList, numberedList. For Excel adds to current sheet, for PowerPoint adds to specified slide.")]
+     Description("Adds content elements to a document. Supports: paragraph, heading, image, table, pageBreak, bulletList, numberedList, shape, line. For PowerPoint: supports X/Y positioning, font styling, and colors. For full PowerPoint control (rich text, gradients, connectors, groups), use the pptx_* tools directly.")]
     public string AddElement(
         [Description("Path to document")] 
         string filePath,
-        [Description("Element type: paragraph, heading, image, table, pageBreak, bulletList, numberedList")] 
+        [Description("Element type: paragraph, heading, image, table, pageBreak, bulletList, numberedList. PowerPoint also: shape, line")] 
         string elementType,
         [Description("Text content (for text elements) or JSON table data: [[\"H1\",\"H2\"],[\"R1C1\",\"R1C2\"]]")] 
         string? content = null,
@@ -262,14 +276,30 @@ public sealed class OfficeDocumentToolsConsolidated(
         string? imagePath = null,
         [Description("Heading level 1-6, or slide index for PowerPoint")] 
         int level = 1,
-        [Description("Width in inches (images/tables)")] 
+        [Description("Width in inches (images/tables/shapes)")] 
         double widthInches = 4.0,
-        [Description("Height in inches (images)")] 
+        [Description("Height in inches (images/shapes)")] 
         double heightInches = 3.0,
         [Description("Sheet name for Excel, ignored for other formats")] 
         string? sheetName = null,
         [Description("Start cell for Excel tables (e.g., A1)")] 
-        string? startCell = null)
+        string? startCell = null,
+        [Description("PowerPoint: X position in inches (default 1.0)")] 
+        double xInches = 1.0,
+        [Description("PowerPoint: Y position in inches (default 2.0)")] 
+        double yInches = 2.0,
+        [Description("PowerPoint: font size in points")] 
+        int? fontSize = null,
+        [Description("PowerPoint: font color as hex (e.g., 003366)")] 
+        string? fontColor = null,
+        [Description("PowerPoint: fill/background color as hex")] 
+        string? fillColor = null,
+        [Description("PowerPoint: bold text")] 
+        bool bold = false,
+        [Description("PowerPoint: font name (e.g., Calibri)")] 
+        string? fontName = null,
+        [Description("PowerPoint: shape type (rectangle, roundRectangle, ellipse, etc.) for shape element")] 
+        string? shapeType = null)
     {
         try
         {
@@ -288,7 +318,8 @@ public sealed class OfficeDocumentToolsConsolidated(
             return format switch
             {
                 "xlsx" => AddExcelElement(filePath, elementType, content, imagePath, sheetName, startCell),
-                "pptx" => AddPowerPointElement(filePath, elementType, content, imagePath, level, widthInches, heightInches),
+                "pptx" => AddPowerPointElement(filePath, elementType, content, imagePath, level, widthInches, heightInches,
+                    xInches, yInches, fontSize, fontColor, fillColor, bold, fontName, shapeType),
                 _ => AddDocumentElement(filePath, format, elementType, content, imagePath, level, widthInches, heightInches)
             };
         }
@@ -684,17 +715,24 @@ public sealed class OfficeDocumentToolsConsolidated(
         return JsonSerializer.Serialize(result with { Format = "xlsx" }, JsonOptions);
     }
 
-    private string WritePowerPointDocument(string filePath, string text, string? slideIndex, string? position)
+    private string WritePowerPointDocument(string filePath, string text, string? slideIndex, string? position,
+        double yInches = 2.0, double widthInches = 8.0, double heightInches = 1.0,
+        int? fontSize = null, string? fontColor = null, bool bold = false, string? fontName = null)
     {
         var pptService = FormatDetector.GetPowerPointService(serviceProvider);
         var idx = int.TryParse(slideIndex, out var i) ? i : 0;
         var x = double.TryParse(position, out var p) ? p : 1.0;
         
+        TextFormatting? textFormat = (fontSize.HasValue || fontColor != null || bold || fontName != null)
+            ? new TextFormatting(Bold: bold, FontSize: fontSize, FontColor: fontColor, FontName: fontName)
+            : null;
+
         var options = new TextBoxOptions(
             X: (long)(x * 914400),
-            Y: (long)(2.0 * 914400),
-            Width: (long)(8.0 * 914400),
-            Height: (long)(1.0 * 914400));
+            Y: (long)(yInches * 914400),
+            Width: (long)(widthInches * 914400),
+            Height: (long)(heightInches * 914400),
+            TextFormat: textFormat);
         
         var result = pptService.AddTextBox(filePath, idx, text, options);
         return JsonSerializer.Serialize(result with { Format = "pptx" }, JsonOptions);
@@ -765,35 +803,46 @@ public sealed class OfficeDocumentToolsConsolidated(
         };
     }
 
-    private string AddPowerPointElement(string filePath, string elementType, string? content, string? imagePath, int slideIndex, double width, double height)
+    private string AddPowerPointElement(string filePath, string elementType, string? content, string? imagePath, 
+        int slideIndex, double width, double height,
+        double xInches = 1.0, double yInches = 2.0, int? fontSize = null, string? fontColor = null,
+        string? fillColor = null, bool bold = false, string? fontName = null, string? shapeType = null)
     {
         var pptService = FormatDetector.GetPowerPointService(serviceProvider);
+        var xEmu = (long)(xInches * 914400);
+        var yEmu = (long)(yInches * 914400);
+        var wEmu = (long)(width * 914400);
+        var hEmu = (long)(height * 914400);
+
+        TextFormatting? textFormat = (fontSize.HasValue || fontColor != null || bold || fontName != null)
+            ? new TextFormatting(Bold: bold, FontSize: fontSize, FontColor: fontColor, FontName: fontName)
+            : null;
 
         return elementType.ToLowerInvariant() switch
         {
             "image" when !string.IsNullOrEmpty(imagePath) && File.Exists(imagePath) =>
                 JsonSerializer.Serialize(pptService.AddImage(filePath, slideIndex, imagePath,
-                    (long)(1.0 * 914400), (long)(2.0 * 914400),
-                    new ImageOptions((long)(width * 914400), (long)(height * 914400))), JsonOptions),
+                    xEmu, yEmu, new ImageOptions(wEmu, hEmu)), JsonOptions),
             "image" => ErrorResult("Image path required and must exist"),
             "paragraph" or "text" when !string.IsNullOrEmpty(content) =>
                 JsonSerializer.Serialize(pptService.AddTextBox(filePath, slideIndex, content,
-                    new TextBoxOptions((long)(1.0 * 914400), (long)(2.0 * 914400), (long)(8.0 * 914400), (long)(1.0 * 914400))), JsonOptions),
+                    new TextBoxOptions(xEmu, yEmu, wEmu, hEmu, TextFormat: textFormat, BackgroundColor: fillColor)), JsonOptions),
             "heading" or "title" when !string.IsNullOrEmpty(content) =>
-                JsonSerializer.Serialize(pptService.AddTitle(filePath, slideIndex, content), JsonOptions),
+                JsonSerializer.Serialize(pptService.AddTitle(filePath, slideIndex, content, null, 
+                    textFormat ?? new TextFormatting(Bold: true, FontSize: 44)), JsonOptions),
             "bulletlist" when !string.IsNullOrEmpty(content) =>
                 JsonSerializer.Serialize(pptService.AddBulletPoints(filePath, slideIndex, content.Split('\n'),
-                    new TextBoxOptions((long)(1.0 * 914400), (long)(2.0 * 914400), (long)(8.0 * 914400), (long)(4.0 * 914400))), JsonOptions),
-            "shape" when !string.IsNullOrEmpty(content) =>
+                    new TextBoxOptions(xEmu, yEmu, wEmu, (long)(4.0 * 914400), TextFormat: textFormat)), JsonOptions),
+            "shape" when !string.IsNullOrEmpty(content) || !string.IsNullOrEmpty(shapeType) =>
                 JsonSerializer.Serialize(pptService.AddShape(filePath, slideIndex,
-                    new ShapeOptions(ShapeType: "rectangle",
-                        X: (long)(1.0 * 914400), Y: (long)(2.0 * 914400),
-                        Width: (long)(width * 914400), Height: (long)(height * 914400),
-                        Text: content, FillColor: "4472C4")), JsonOptions),
+                    new ShapeOptions(ShapeType: shapeType ?? "rectangle",
+                        X: xEmu, Y: yEmu, Width: wEmu, Height: hEmu,
+                        Text: content, FillColor: fillColor ?? "4472C4", 
+                        TextFormat: textFormat)), JsonOptions),
             "line" =>
                 JsonSerializer.Serialize(pptService.AddLine(filePath, slideIndex,
-                    new LineOptions(X1: (long)(1.0 * 914400), Y1: (long)(2.0 * 914400),
-                        X2: (long)((1.0 + width) * 914400), Y2: (long)(2.0 * 914400))), JsonOptions),
+                    new LineOptions(X1: xEmu, Y1: yEmu,
+                        X2: (long)((xInches + width) * 914400), Y2: yEmu)), JsonOptions),
             _ => ErrorResult($"Element type '{elementType}' requires content", "Provide 'content' parameter")
         };
     }
