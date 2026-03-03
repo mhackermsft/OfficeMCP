@@ -11,6 +11,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that e
 - **PDF support** — create, read, watermark, and extract pages from PDFs
 - **Encrypted document handling** — detection and support for protected Office files
 - **Progressive tool disclosure** — tiered tool exposure keeps context lean
+- **Image creation** — embed images in Word, PowerPoint, and Excel documents
+- **Image extraction** — extract all embedded images from Word, PowerPoint, and PDF files as base64 data with MIME type for direct AI vision analysis (OCR, captioning)
+- **Rich document reading** — `office_read` on `.docx` returns an ordered content list of headings, paragraphs, tables, and inline images in document sequence, preserving section context around every image
 
 ## Supported Formats
 
@@ -87,7 +90,7 @@ These tools work across all supported formats and are organized into three tiers
 | Tool | Description |
 |------|-------------|
 | `office_create` | Create a new document in any supported format |
-| `office_read` | Read content from any document |
+| `office_read` | Read content from any document. For Word: returns an ordered content list with headings, paragraphs, tables, and inline images (base64) in reading order by default. Set `includeImages=false` for plain text only. |
 | `office_write` | Write or append content to a document |
 | `office_convert` | Convert between formats (e.g., `.docx` → `.md`) |
 | `office_metadata` | Retrieve document metadata (format, size, structure) |
@@ -117,7 +120,7 @@ These tools work across all supported formats and are organized into three tiers
 | `word_read` | Read text from a Word document |
 | `word_add_content` | Append Markdown content to a Word document |
 | `word_add_element` | Add page breaks, headers, or footers |
-| `word_add_image` | Embed an image |
+| `word_add_image` | Embed an image (supports JPEG, PNG, GIF, BMP, TIFF) |
 | `word_convert` | Convert between Word and Markdown |
 | `word_batch` | Perform multiple write operations in one call |
 
@@ -147,10 +150,59 @@ These tools work across all supported formats and are organized into three tiers
 | `pptx_manage_slide` | Delete, duplicate, or reorder slides |
 | `pptx_add_title` | Set a slide title and subtitle |
 | `pptx_add_text` | Add text or bullet points to a slide |
-| `pptx_add_image` | Embed an image on a slide |
+| `pptx_add_image` | Embed an image on a slide (supports JPEG, PNG, GIF, BMP) |
 | `pptx_add_table` | Add a table to a slide |
 | `pptx_add_notes` | Add speaker notes to a slide |
 | `pptx_batch` | Perform multiple slide operations in one call |
+
+## Image Support
+
+### Creating documents with images
+
+Images can be embedded when creating or editing documents:
+
+| Format | How |
+|--------|-----|
+| Word | `word_add_image` tool, or inline Markdown `![alt](path)` via `office_create` / `office_write` |
+| PowerPoint | `pptx_add_image` tool |
+| Excel | `office_add_element` with `elementType: "image"` |
+
+### Reading documents with images
+
+#### Rich ordered reading (Word — default)
+
+Calling `office_read` on a `.docx` file returns the full document as an **ordered content list** where each item has a `Type` of `"heading"`, `"paragraph"`, `"table"`, or `"image"`. Images appear immediately after their containing paragraph so the preceding headings and paragraphs provide natural section context — no separate extraction step needed.
+
+```json
+{
+  "Content": [
+    { "Type": "heading",   "Text": "Q4 Financial Summary", "Level": 1 },
+    { "Type": "paragraph", "Text": "Revenue grew 23% as shown in the chart below." },
+    { "Type": "image",     "AltText": "Revenue chart", "MimeType": "image/png",
+                           "ImageBase64": "...", "WidthPx": 640, "HeightPx": 400 },
+    { "Type": "paragraph", "Text": "Figure 1: Q4 2025 revenue by region." },
+    { "Type": "heading",   "Text": "Cost Analysis", "Level": 2 }
+  ]
+}
+```
+
+Pass `includeImages: false` to get plain text only.
+
+#### Bulk image extraction
+
+`office_extract` with `extractType: "images"` extracts all embedded images from Word, PowerPoint, and PDF files. Each result includes:
+
+| Field | Description |
+|-------|-------------|
+| `ImageBase64` | Full base64-encoded image bytes for AI vision analysis |
+| `MimeType` | `image/png`, `image/jpeg`, etc. |
+| `AltText` | Alt text stored in the document |
+| `ContextBefore` | Paragraph immediately before the image (Word) or full slide text (PowerPoint) |
+| `ContextAfter` | Paragraph immediately after the image (Word) |
+| `WidthPx` / `HeightPx` | Dimensions at 96 dpi |
+| `PageOrSlideNumber` | Source page (PDF) or slide number (PowerPoint) |
+
+---
 
 ## Project Structure
 
