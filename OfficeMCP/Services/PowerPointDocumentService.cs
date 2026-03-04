@@ -38,30 +38,35 @@ public sealed class PowerPointDocumentService : IPowerPointDocumentService
             using (var presentation = PresentationDocument.Create(filePath, PresentationDocumentType.Presentation))
             {
                 var presentationPart = presentation.AddPresentationPart();
-                presentationPart.Presentation = new Presentation(
-                    new SlideIdList(),
-                    new SlideSize { Cx = (int)DefaultSlideWidth, Cy = (int)DefaultSlideHeight },
-                    new NotesSize { Cx = (int)DefaultSlideHeight, Cy = (int)DefaultSlideWidth }
-                );
 
-                // Add slide master
+                // Add slide master and layout parts first so we can reference them in the Presentation XML
                 var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>();
                 slideMasterPart.SlideMaster = CreateSlideMaster();
 
                 var slideLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>();
                 slideLayoutPart.SlideLayout = CreateSlideLayout();
 
+                // Add bidirectional relationship: layout must reference its parent master
+                slideLayoutPart.AddPart(slideMasterPart);
+
                 slideMasterPart.SlideMaster.Append(new SlideLayoutIdList(
                     new SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(slideLayoutPart) }
-                ));
-
-                presentationPart.Presentation.Append(new SlideMasterIdList(
-                    new SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }
                 ));
 
                 // Add theme
                 var themePart = slideMasterPart.AddNewPart<ThemePart>();
                 themePart.Theme = CreateDefaultTheme();
+
+                // Build the Presentation element with children in strict OOXML schema order:
+                // sldMasterIdLst → notesMasterIdLst → handoutMasterIdLst → sldIdLst → sldSz → notesSz
+                presentationPart.Presentation = new Presentation(
+                    new SlideMasterIdList(
+                        new SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }
+                    ),
+                    new SlideIdList(),
+                    new SlideSize { Cx = (int)DefaultSlideWidth, Cy = (int)DefaultSlideHeight },
+                    new NotesSize { Cx = (int)DefaultSlideHeight, Cy = (int)DefaultSlideWidth }
+                );
 
                 presentation.Save();
             } // File is fully closed/flushed here
